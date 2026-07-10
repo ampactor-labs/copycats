@@ -70,7 +70,8 @@ class Driver extends Node:
 		get_tree().quit(1 if fails > 0 else 0)
 
 	func _bail(msg: String) -> void:
-		check(msg, false, "stage=%s scene=%s f=%d" % [stage, str(main.scene), f])
+		# main.get() stays safe even if main.gd failed to parse (bare Node2D)
+		check(msg, false, "stage=%s scene=%s f=%d" % [stage, str(main.get("scene")), f])
 		_finish()
 
 	func _physics_process(_dt: float) -> void:
@@ -80,9 +81,12 @@ class Driver extends Node:
 			return
 		match stage:
 			"boot":
+				if f > 5 and main.get("scene") == null:
+					_bail("main.gd failed to load (parse error?)")
+					return
 				if f > 5:
 					check("boots to title", str(main.scene) == "title", str(main.scene))
-					tap(Vector2(416, 200))
+					tap(main._title_play_rect().get_center())
 					stage = "wait_cd"
 			"wait_cd":
 				if str(main.scene) == "countdown":

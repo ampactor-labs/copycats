@@ -30,33 +30,10 @@ static func rand_log(seed_v: int, n: int) -> PackedByteArray:
 	return out
 
 static func bot_log(seed_v: int) -> PackedByteArray:
-	# always runs right, jumps in random bursts; chaotic but goal-seeking
-	var r := SimRNG.new(seed_v)
-	var out := PackedByteArray()
-	var hold := 0
-	var gap := 2 + r.below(10)
-	for t in range(900):
-		var b := 14
-		if hold > 0:
-			b |= SimC.BIT_JUMP
-			hold -= 1
-		else:
-			gap -= 1
-			if gap <= 0:
-				hold = 6 + r.below(13)
-				gap = 3 + r.below(12)
-		out.append(b)
-	return out
+	return SimBot.bot_log(seed_v)
 
 static func farm_finishing(max_seeds: int) -> PackedByteArray:
-	# first bot seed whose run genuinely reaches the flag on the bare level
-	var lvl := SimLevel.build([])
-	for seed_v in range(1, max_seeds + 1):
-		var log_b := bot_log(seed_v)
-		var st := SimRace.resim(log_b, lvl)
-		if st.finished:
-			return log_b.slice(0, int(st.len))
-	return PackedByteArray()
+	return SimBot.farm_finishing(SimLevel.build([]), max_seeds)
 
 static func saw_on_path(st: Dictionary, lvl: SimLevel) -> Dictionary:
 	# first placeable saw cell along a recorded stream; {} if none

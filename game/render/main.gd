@@ -65,6 +65,10 @@ const AudioLib := preload("res://render/audio.gd")
 var audio: Node
 var muted := false
 var best_rounds := 0
+var daily_mode := false
+var daily_key := ""
+var daily_date := ""
+var daily_best_today := 0
 var font_v: Font
 
 func _ready() -> void:
@@ -75,22 +79,39 @@ func _ready() -> void:
 	_load_cfg()
 	audio.muted = muted
 
+func _today() -> Dictionary:
+	var d := Time.get_datetime_dict_from_system(true)
+	var num: int = d.year * 10000 + d.month * 100 + d.day
+	return { "num": num, "key": "daily_%d" % num, "date": "%04d-%02d-%02d" % [d.year, d.month, d.day] }
+
 func _load_cfg() -> void:
 	var c := ConfigFile.new()
 	if c.load("user://chickho.cfg") == OK:
 		muted = bool(c.get_value("s", "muted", false))
 		best_rounds = int(c.get_value("s", "best", 0))
+		daily_best_today = int(c.get_value("d", String(_today().key), 0))
 
 func _save_cfg() -> void:
 	var c := ConfigFile.new()
+	c.load("user://chickho.cfg")
 	c.set_value("s", "muted", muted)
 	c.set_value("s", "best", best_rounds)
+	if daily_key != "" and daily_best_today > 0:
+		c.set_value("d", daily_key, daily_best_today)
 	c.save("user://chickho.cfg")
 
 # ---------- match flow ----------
 
-func _start_match() -> void:
-	m = SimMatch.new(randi() & 0x7FFFFFFF)
+func _start_match(daily: bool = false) -> void:
+	daily_mode = daily
+	if daily:
+		var t := _today()
+		daily_key = t.key
+		daily_date = t.date
+		m = SimMatch.new(int(t.num))
+		m.template = SimGen.daily(int(t.num)).lvl
+	else:
+		m = SimMatch.new(randi() & 0x7FFFFFFF)
 	_next_round()
 
 func _next_round() -> void:
@@ -99,7 +120,7 @@ func _next_round() -> void:
 	var rd := m.begin_round()
 	if rd.place:
 		offer = rd.offer
-		place_level = SimLevel.build(m.items)
+		place_level = SimLevel.derive(m.base_level(), m.items)
 		scene = "place"
 		if m.round_n == 2:
 			_set_banner([["PLACE YOUR TRAP", C_TEXT]], 1.8, "your last run races you as a ghost horse. dunk it.")
@@ -144,7 +165,11 @@ func _after_recap() -> void:
 	if res.over:
 		over_won = res.won
 		if over_won:
-			if best_rounds == 0 or m.round_n < best_rounds:
+			if daily_mode:
+				if daily_best_today == 0 or m.round_n < daily_best_today:
+					daily_best_today = m.round_n
+					_save_cfg()
+			elif best_rounds == 0 or m.round_n < best_rounds:
 				best_rounds = m.round_n
 				_save_cfg()
 			audio.play("win")
@@ -239,8 +264,8 @@ func _drain_events() -> void:
 				burst(px_of(e.x), px_of(e.y) - 13.0, C_HAZ, 10, 6.0)
 				audio.play("die")
 			"finish":
-				burst(px_of(SimLevel.FLAG_CX), px_of(SimLevel.FLAG_TOP), C_GOAL, 26, 7.0)
-				burst(px_of(SimLevel.FLAG_CX), px_of(SimLevel.FLAG_TOP), C_YOU, 18, 6.0)
+				burst(px_of(race.level.flag_cx), px_of(race.level.flag_top), C_GOAL, 26, 7.0)
+				burst(px_of(race.level.flag_cx), px_of(race.level.flag_top), C_YOU, 18, 6.0)
 				audio.play("finish")
 			"dunk":
 				burst(px_of(e.x), px_of(e.y) - 13.0, C_GHOST, 18, 6.0)
@@ -248,7 +273,7 @@ func _drain_events() -> void:
 				shake = maxf(shake, 5.0)
 				audio.play("dunk")
 			"gfinish":
-				burst(px_of(SimLevel.FLAG_CX), px_of(SimLevel.FLAG_TOP), C_GHOST, 12, 5.0)
+				burst(px_of(race.level.flag_cx), px_of(race.level.flag_top), C_GHOST, 12, 5.0)
 			"time":
 				pop(px_of(e.x), px_of(e.y) - 45.0, "TIME!", C_HAZ)
 	race.events.clear()
@@ -316,10 +341,10 @@ func _input(event: InputEvent) -> void:
 		elif event.physical_keycode == KEY_ENTER:
 			if scene == "title":
 				audio.play("ui")
-				_start_match()
+				_start_match(false)
 			elif scene == "over":
 				audio.play("ui")
-				_start_match()
+				_start_match(daily_mode)
 			elif scene == "recap" and recap.t > 0.4:
 				_after_recap()
 
@@ -336,12 +361,15 @@ func _touch_down(i: int, pos: Vector2) -> void:
 				_save_cfg()
 				if not muted:
 					audio.play("ui")
-			else:
+			elif _title_play_rect().has_point(pos):
 				audio.play("ui")
-				_start_match()
+				_start_match(false)
+			elif _title_daily_rect().has_point(pos):
+				audio.play("ui")
+				_start_match(true)
 		"over":
 			audio.play("ui")
-			_start_match()
+			_start_match(daily_mode)
 		"recap":
 			if recap.t > 0.7:
 				_after_recap()
@@ -512,7 +540,7 @@ func _draw() -> void:
 		return
 	_draw_level(lvl)
 	_draw_world_items(lvl)
-	_draw_flag()
+	_draw_flag(lvl)
 	if race != null and scene != "place":
 		for a in SimRace.arrows_at(race.tracks, maxi(race.tick - 1, 0)):
 			_draw_arrow(px_of(a.xc), px_of(a.yc), int(a.dir))
@@ -656,10 +684,10 @@ func _draw_arrow(x: float, y: float, dir: int) -> void:
 		pts[k] += shk_v
 	draw_colored_polygon(pts, C_HAZ)
 
-func _draw_flag() -> void:
-	var x := px_of(SimLevel.FLAG_CX)
-	var top := px_of(SimLevel.FLAG_TOP)
-	var bot := px_of(SimLevel.FLAG_BOT)
+func _draw_flag(lvl: SimLevel) -> void:
+	var x := px_of(lvl.flag_cx)
+	var top := px_of(lvl.flag_top)
+	var bot := px_of(lvl.flag_bot)
 	rect(x - 14.0, top - 4.0, 30.0, bot - top + 8.0, ca(C_GOAL, 0.12))
 	rect(x - 2.0, top, 4.0, bot - top, C_TEXT)
 	var wave := sin(elapsed * 5.0) * 3.0
@@ -715,7 +743,7 @@ func _draw_horse(x: float, y: float, face: int, alpha: float, sc: float = 1.0) -
 func _draw_ghosts() -> void:
 	if scene == "place":
 		for i in range(m.roster.size()):
-			_draw_horse(px_of(SimLevel.SPAWN_PX) + (i - 1) * 16.0, px_of(SimLevel.SPAWN_PY), 1, 0.45)
+			_draw_horse(px_of(place_level.spawn_px) + (i - 1) * 16.0, px_of(place_level.spawn_py), 1, 0.45)
 		return
 	if race == null:
 		return
@@ -748,7 +776,8 @@ func _draw_hud() -> void:
 	txt_l(44.0, 32.0, "%02d" % m.you, 19, C_YOU)
 	_draw_horse(W - 28.0, 42.0, -1, 0.8, 1.0)
 	draw_string(font_v, Vector2(W - 446.0, 32.0), "%02d" % m.foes, HORIZONTAL_ALIGNMENT_RIGHT, 400.0, 19, C_GHOST)
-	txt_c(W / 2.0, 20.0, "ROUND %d  -  FIRST TO %d" % [m.round_n, SimC.TARGET_SCORE], 13, C_DIM)
+	var head := "DAILY  -  " if daily_mode else ""
+	txt_c(W / 2.0, 20.0, head + "ROUND %d  -  FIRST TO %d" % [m.round_n, SimC.TARGET_SCORE], 13, C_DIM)
 	if scene == "race":
 		var left := maxi(0, (SimC.ROUND_TICKS - race.tick + 59) / 60)
 		txt_c(W / 2.0, 42.0, "%ds" % left, 17, C_HAZ if left <= 10 else C_TEXT)
@@ -781,7 +810,7 @@ func _draw_place_ui() -> void:
 	rect(0.0, H - 126.0, W, 126.0, Color(C_VOID.r, C_VOID.g, C_VOID.b, 0.55))
 	var hint := "tap the check to lock it in" if not pending.is_empty() else "drag a piece into the level"
 	txt_c(W / 2.0, H - 104.0, hint, 13, C_DIM)
-	for z in SimLevel.SAFE:
+	for z in place_level.safe:
 		rect(z[0] * TILE, z[1] * TILE, z[2] * TILE, z[3] * TILE, ca(C_GOAL, 0.10))
 	for i in range(offer.size()):
 		_draw_card(offer[i], _card_rect(i))
@@ -900,7 +929,12 @@ func _draw_over() -> void:
 	txt_c(W / 2.0, H / 2.0 - 52.0, "CHICKEN DINNER" if over_won else "HORSED", 44, C_YOU if over_won else C_GHOST)
 	txt_c(W / 2.0, H / 2.0 - 18.0, "you outran every ghost of yourself" if over_won else "your past selves finished without you", 15, C_TEXT)
 	txt_c(W / 2.0, H / 2.0 + 10.0, "YOU %d  -  HORSES %d  -  %d ROUNDS" % [m.you, m.foes, m.round_n], 14, C_DIM)
-	if over_won and best_rounds > 0:
+	if daily_mode:
+		var s := "daily %s" % daily_date
+		if daily_best_today > 0:
+			s += "  -  best %d rounds" % daily_best_today
+		txt_c(W / 2.0, H / 2.0 + 32.0, s, 13, C_FAINT)
+	elif over_won and best_rounds > 0:
 		txt_c(W / 2.0, H / 2.0 + 32.0, "best: %d rounds" % best_rounds, 13, C_FAINT)
 	txt_c(W / 2.0, H / 2.0 + 68.0 + sin(elapsed * 4.0) * 3.0, "TAP TO GO AGAIN", 17, C_GOAL)
 
@@ -917,12 +951,29 @@ func _draw_title() -> void:
 		x += 38.0
 	txt_c(cx, H * 0.36, "place a trap. race the ghost horses of your past runs.", 14, C_TEXT)
 	txt_c(cx, H * 0.36 + 20.0, "finish while they fall - first to %d wins" % SimC.TARGET_SCORE, 14, C_DIM)
-	txt_c(cx, H * 0.62 + sin(elapsed * 4.0) * 3.0, "TAP TO PLAY", 17, C_GOAL)
+	var pr := _title_play_rect()
+	draw_rect(pr, C_TILE)
+	draw_rect(pr, C_YOU, false, 2.0)
+	txt_c(pr.get_center().x, pr.get_center().y + 6.0, "PLAY", 20, C_YOU)
+	var dr := _title_daily_rect()
+	draw_rect(dr, C_TILE)
+	draw_rect(dr, C_GHOST, false, 2.0)
+	txt_c(dr.get_center().x, dr.position.y + 26.0, "DAILY", 20, C_GHOST)
+	var sub: String = _today().date
+	if daily_best_today > 0:
+		sub += "  best %d" % daily_best_today
+	txt_c(dr.get_center().x, dr.position.y + 48.0, sub, 11, C_DIM)
 	txt_c(cx, H * 0.74, "phone: left thumb slides to move - right thumb taps to jump - swipe down drops", 12, C_FAINT)
 	txt_c(cx, H * 0.74 + 18.0, "desktop: arrows / WASD + space", 12, C_FAINT)
 	txt_c(cx, H * 0.88, "[ sound off ]" if muted else "[ sound on ]", 13, C_FAINT if muted else C_TEXT)
 	if best_rounds > 0:
 		txt_c(cx, H * 0.88 + 20.0, "best win: %d rounds" % best_rounds, 11, C_FAINT)
+
+func _title_play_rect() -> Rect2:
+	return Rect2(W / 2.0 - 210.0, H * 0.52, 190.0, 60.0)
+
+func _title_daily_rect() -> Rect2:
+	return Rect2(W / 2.0 + 20.0, H * 0.52, 190.0, 60.0)
 
 func _draw_banner() -> void:
 	if banner.is_empty():

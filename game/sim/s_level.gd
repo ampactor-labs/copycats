@@ -43,16 +43,36 @@ const TYPE_ID := { "plank": 0, "spikes": 1, "saw": 2, "spring": 3, "bow": 4 }
 var grid := PackedByteArray()
 var one_way := {}                 # cell index -> true
 var items: Array = []             # {type, cx, cy, rot, round}
+var rows := PackedStringArray()   # geometry source, kept for derive()
+# per-level geometry; defaults are the classic layout, generators override
+var spawn_px: int = SPAWN_PX
+var spawn_py: int = SPAWN_PY
+var flag_cx: int = FLAG_CX
+var flag_top: int = FLAG_TOP
+var flag_bot: int = FLAG_BOT
+var safe: Array = SAFE
 
-static func build(item_list: Array) -> SimLevel:
+static func build(item_list: Array, rows_in := PackedStringArray()) -> SimLevel:
 	var l := SimLevel.new()
+	l.rows = rows_in if rows_in.size() == SimC.GH else PackedStringArray(ROWS)
 	l.grid.resize(SimC.GW * SimC.GH)
 	for y in range(SimC.GH):
 		for x in range(SimC.GW):
-			if ROWS[y][x] == "#":
+			if l.rows[y][x] == "#":
 				l.grid[y * SimC.GW + x] = 1
 	for it in item_list:
 		l.add_item(it)
+	return l
+
+static func derive(base: SimLevel, item_list: Array) -> SimLevel:
+	# same geometry as base, different item set (ghost resim, placement)
+	var l := build(item_list, base.rows)
+	l.spawn_px = base.spawn_px
+	l.spawn_py = base.spawn_py
+	l.flag_cx = base.flag_cx
+	l.flag_top = base.flag_top
+	l.flag_bot = base.flag_bot
+	l.safe = base.safe
 	return l
 
 static func items_upto(item_list: Array, round_n: int) -> Array:
@@ -102,7 +122,7 @@ func place_valid(type: String, cx: int, cy: int, rot: int) -> bool:
 			for oc in item_cells(it.type, it.cx, it.cy, it.rot):
 				if oc == c:
 					return false
-		for z in SAFE:
+		for z in safe:
 			if c.x >= z[0] and c.x < z[0] + z[2] and c.y >= z[1] and c.y < z[1] + z[3]:
 				return false
 	return true
@@ -124,5 +144,5 @@ static func spike_box(it: Dictionary) -> Dictionary:
 		_:  # on a right wall, points left
 			return { "x0": (cx + 1) * f - t, "x1": (cx + 1) * f, "y0": cy * f + inset, "y1": (cy + 2) * f - inset }
 
-static func goal_rect() -> Dictionary:
-	return { "x0": FLAG_CX - GOAL_HW, "x1": FLAG_CX + GOAL_HW, "y0": FLAG_TOP, "y1": FLAG_BOT }
+func goal_rect() -> Dictionary:
+	return { "x0": flag_cx - GOAL_HW, "x1": flag_cx + GOAL_HW, "y0": flag_top, "y1": flag_bot }

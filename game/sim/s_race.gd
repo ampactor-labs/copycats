@@ -18,13 +18,14 @@ var fates: Array = []             # {death: tick or -1, done: tick}
 var spring_last := {}             # item index -> last trigger tick
 var events: Array = []            # drained by the shell each tick; cosmetic
 
-static func create(all_items: Array, roster: Array) -> SimRace:
+static func create(all_items: Array, roster: Array, template: SimLevel = null) -> SimRace:
+	var base := template if template != null else SimLevel.build([])
 	var r := SimRace.new()
-	r.level = SimLevel.build(all_items)
+	r.level = SimLevel.derive(base, all_items)
 	r.tracks = schedule_arrows(r.level)
-	r.p = SimPlayer.spawn()
+	r.p = SimPlayer.spawn(r.level)
 	for g in roster:
-		var lvl_g := SimLevel.build(SimLevel.items_upto(all_items, g.round))
+		var lvl_g := SimLevel.derive(base, SimLevel.items_upto(all_items, g.round))
 		var st := resim(g.inputs, lvl_g)
 		r.ghost_streams.append(st)
 		var newer: Array = []
@@ -70,7 +71,7 @@ static func arrows_at(tracks_in: Array, t: int) -> Array:
 
 static func resim(log_bytes: PackedByteArray, lvl: SimLevel) -> Dictionary:
 	var tr := schedule_arrows(lvl)
-	var pl := SimPlayer.spawn()
+	var pl := SimPlayer.spawn(lvl)
 	var cd := {}
 	var ev: Array = []
 	var xs := PackedInt64Array()

@@ -27,6 +27,7 @@ func _initialize() -> void:
 	test_fates()
 	test_scoring()
 	test_replay_codec()
+	test_gen()
 	test_golden()
 	if fails == 0:
 		print("\nALL OK")
@@ -180,6 +181,28 @@ func test_replay_codec() -> void:
 	b[4] = 0xEE   # corrupt version
 	check("wrong version rejected", SimReplay.decode(b).is_empty())
 	check("garbage rejected", SimReplay.decode(PackedByteArray([1, 2, 3])).is_empty())
+
+func test_gen() -> void:
+	var a := SimGen.generate(123, [])
+	var b := SimGen.generate(123, [])
+	check("gen deterministic", a.rows == b.rows)
+	var c := SimGen.generate(124, [])
+	check("gen varies by seed", a.rows != c.rows)
+	var d := SimGen.daily(20260710)
+	check("daily level proven beatable", int(d.attempt) >= 0 and int(d.proof_len) > 0, str(d))
+	var lvl: SimLevel = d.lvl
+	check("spawn stands on ground", lvl.solid_at(SimC.fdiv(lvl.spawn_px), SimC.fdiv(lvl.spawn_py)))
+	check("flag sits on its platform", lvl.solid_at(SimC.fdiv(lvl.flag_cx), SimC.fdiv(lvl.flag_bot)))
+	var log_b := SimBot.farm_finishing(lvl, 100)
+	var st := SimRace.resim(log_b, lvl)
+	check("bot finishes the generated level", bool(st.finished))
+	var race := SimRace.create([], [{ "inputs": log_b, "round": 1, "len": int(st.len) }], lvl)
+	check("generated-level ghost stream matches resim", int(race.ghost_streams[0].len) == int(st.len))
+	var saw := L.saw_on_path(st, lvl)
+	if not saw.is_empty():
+		var race2 := SimRace.create([{ "type": "saw", "cx": saw.cx, "cy": saw.cy, "rot": 0, "round": 2 }],
+			[{ "inputs": log_b, "round": 1, "len": int(st.len) }], lvl)
+		check("saw dunks ghost on generated level", int(race2.fates[0].death) >= 0)
 
 func test_golden() -> void:
 	var log_b := L.rand_log(0xC41C, 900)

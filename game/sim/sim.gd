@@ -13,10 +13,14 @@ var you: int = 0
 var foes: int = 0
 var items: Array = []             # {type, cx, cy, rot, round}
 var roster: Array = []            # {inputs, round, len}
+var template: SimLevel = null     # generated level for dailies; null = classic
 
 func _init(match_seed: int) -> void:
 	seed_v = match_seed
 	rng = SimRNG.new(match_seed)
+
+func base_level() -> SimLevel:
+	return template if template != null else SimLevel.build([])
 
 func begin_round() -> Dictionary:
 	round_n += 1
@@ -41,7 +45,7 @@ func commit_item(type: String, cx: int, cy: int, rot: int) -> void:
 	items.append({ "type": type, "cx": cx, "cy": cy, "rot": rot, "round": round_n })
 
 func make_race() -> SimRace:
-	return SimRace.create(items, roster)
+	return SimRace.create(items, roster, template)
 
 static func score_round(finished: bool, fates: Array) -> Dictionary:
 	var dunks := 0

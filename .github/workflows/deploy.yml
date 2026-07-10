@@ -1,0 +1,62 @@
+# Exports the single-threaded web build and publishes it to GitHub Pages.
+# No-threads variant: no SharedArrayBuffer, no COOP/COEP headers needed,
+# runs on iOS Safari — install is never the price of first contact.
+name: deploy
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache Godot and export templates
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/godot-bin
+            ~/.local/share/godot/export_templates
+          key: godot-4.7-stable-web-v1
+      - name: Fetch Godot and export templates
+        run: |
+          mkdir -p ~/godot-bin ~/.local/share/godot/export_templates
+          if [ ! -x ~/godot-bin/godot ]; then
+            curl -sSL -o /tmp/g.zip https://github.com/godotengine/godot/releases/download/4.7-stable/Godot_v4.7-stable_linux.x86_64.zip
+            unzip -q /tmp/g.zip -d /tmp
+            mv /tmp/Godot_v4.7-stable_linux.x86_64 ~/godot-bin/godot
+            chmod +x ~/godot-bin/godot
+          fi
+          if [ ! -d ~/.local/share/godot/export_templates/4.7.stable ]; then
+            curl -sSL -o /tmp/t.tpz https://github.com/godotengine/godot/releases/download/4.7-stable/Godot_v4.7-stable_export_templates.tpz
+            unzip -q /tmp/t.tpz -d /tmp/tpl
+            mv /tmp/tpl/templates ~/.local/share/godot/export_templates/4.7.stable
+          fi
+      - name: Export web build
+        run: |
+          ~/godot-bin/godot --headless --path game --import || true
+          mkdir -p build/web
+          ~/godot-bin/godot --headless --path game --export-release Web build/web/index.html
+          test -s build/web/index.html
+          test -s build/web/index.wasm
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

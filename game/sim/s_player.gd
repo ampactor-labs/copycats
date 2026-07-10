@@ -32,10 +32,10 @@ var dead: bool = false
 var finished: bool = false
 var done_tick: int = -1
 
-static func spawn() -> SimPlayer:
+static func spawn(lvl: SimLevel) -> SimPlayer:
 	var p := SimPlayer.new()
-	p.px = SimLevel.SPAWN_PX
-	p.py = SimLevel.SPAWN_PY
+	p.px = lvl.spawn_px
+	p.py = lvl.spawn_py
 	return p
 
 func step(lvl: SimLevel, arrows: Array, spring_last: Dictionary, b: int, tick: int, ev: Array) -> void:
@@ -108,7 +108,7 @@ func step(lvl: SimLevel, arrows: Array, spring_last: Dictionary, b: int, tick: i
 		return
 	if py < -8 * SimC.FP:
 		py = -8 * SimC.FP
-	var gr := SimLevel.goal_rect()
+	var gr := lvl.goal_rect()
 	if _overlap(gr):
 		finished = true
 		done_tick = tick
