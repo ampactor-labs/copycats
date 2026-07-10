@@ -52,7 +52,7 @@ var prev_px := 0.0
 var prev_py := 0.0
 var cur_px := 0.0
 var cur_py := 0.0
-var spring_hits := {}
+var cushion_hits := {}
 var ghost_trail: Array = []
 
 var touches := {}
@@ -86,19 +86,19 @@ func _today() -> Dictionary:
 
 func _load_cfg() -> void:
 	var c := ConfigFile.new()
-	if c.load("user://chickho.cfg") == OK:
+	if c.load("user://copycats.cfg") == OK:
 		muted = bool(c.get_value("s", "muted", false))
 		best_rounds = int(c.get_value("s", "best", 0))
 		daily_best_today = int(c.get_value("d", String(_today().key), 0))
 
 func _save_cfg() -> void:
 	var c := ConfigFile.new()
-	c.load("user://chickho.cfg")
+	c.load("user://copycats.cfg")
 	c.set_value("s", "muted", muted)
 	c.set_value("s", "best", best_rounds)
 	if daily_key != "" and daily_best_today > 0:
 		c.set_value("d", daily_key, daily_best_today)
-	c.save("user://chickho.cfg")
+	c.save("user://copycats.cfg")
 
 # ---------- match flow ----------
 
@@ -123,16 +123,16 @@ func _next_round() -> void:
 		place_level = SimLevel.derive(m.base_level(), m.items)
 		scene = "place"
 		if m.round_n == 2:
-			_set_banner([["PLACE YOUR TRAP", C_TEXT]], 1.8, "your last run races you as a ghost horse. dunk it.")
+			_set_banner([["KNOCK SOMETHING OVER", C_TEXT]], 1.8, "your last life races you as a copycat. swat it.")
 		else:
-			_set_banner([["PLACE YOUR TRAP", C_TEXT]], 1.2, "")
+			_set_banner([["KNOCK SOMETHING OVER", C_TEXT]], 1.2, "")
 	else:
 		_begin_race()
-		_set_banner([["REACH THE FLAG", C_TEXT]], 1.8, "left thumb: move    right thumb: jump")
+		_set_banner([["GET TO DINNER", C_TEXT]], 1.8, "left thumb: move    right thumb: jump")
 
 func _begin_race() -> void:
 	race = m.make_race()
-	spring_hits = {}
+	cushion_hits = {}
 	ghost_trail = []
 	for i in range(race.ghost_streams.size()):
 		ghost_trail.append([])
@@ -252,11 +252,11 @@ func _drain_events() -> void:
 				sq = 0.3
 				dust(px_of(e.x), px_of(e.y), 5)
 				audio.play("land")
-			"spring":
+			"cushion":
 				sq = -0.4
-				spring_hits[e.i] = race.tick
+				cushion_hits[e.i] = race.tick
 				dust(px_of(e.x), px_of(e.y), 8)
-				audio.play("spring")
+				audio.play("cushion")
 			"die":
 				hitstop = 7
 				shake = 9.0
@@ -264,16 +264,16 @@ func _drain_events() -> void:
 				burst(px_of(e.x), px_of(e.y) - 13.0, C_HAZ, 10, 6.0)
 				audio.play("die")
 			"finish":
-				burst(px_of(race.level.flag_cx), px_of(race.level.flag_top), C_GOAL, 26, 7.0)
-				burst(px_of(race.level.flag_cx), px_of(race.level.flag_top), C_YOU, 18, 6.0)
+				burst(px_of(race.level.bowl_cx), px_of(race.level.bowl_top), C_GOAL, 26, 7.0)
+				burst(px_of(race.level.bowl_cx), px_of(race.level.bowl_top), C_YOU, 18, 6.0)
 				audio.play("finish")
-			"dunk":
+			"swat":
 				burst(px_of(e.x), px_of(e.y) - 13.0, C_GHOST, 18, 6.0)
-				pop(px_of(e.x), px_of(e.y) - 27.0, "DUNKED", C_HAZ)
+				pop(px_of(e.x), px_of(e.y) - 27.0, "SWATTED", C_HAZ)
 				shake = maxf(shake, 5.0)
-				audio.play("dunk")
+				audio.play("swat")
 			"gfinish":
-				burst(px_of(race.level.flag_cx), px_of(race.level.flag_top), C_GHOST, 12, 5.0)
+				burst(px_of(race.level.bowl_cx), px_of(race.level.bowl_top), C_GHOST, 12, 5.0)
 			"time":
 				pop(px_of(e.x), px_of(e.y) - 45.0, "TIME!", C_HAZ)
 	race.events.clear()
@@ -540,16 +540,16 @@ func _draw() -> void:
 		return
 	_draw_level(lvl)
 	_draw_world_items(lvl)
-	_draw_flag(lvl)
+	_draw_bowl(lvl)
 	if race != null and scene != "place":
-		for a in SimRace.arrows_at(race.tracks, maxi(race.tick - 1, 0)):
-			_draw_arrow(px_of(a.xc), px_of(a.yc), int(a.dir))
+		for a in SimRace.balls_at(race.tracks, maxi(race.tick - 1, 0)):
+			_draw_ball(px_of(a.xc), px_of(a.yc), int(a.dir))
 	_draw_ghosts()
 	if race != null and scene != "place" and not race.p.dead:
 		var alpha := Engine.get_physics_interpolation_fraction()
 		var dx := lerpf(prev_px, cur_px, alpha)
 		var dy := lerpf(prev_py, cur_py, alpha)
-		_draw_chicken(dx, dy, race.p.face, 1.0, 1.0, true)
+		_draw_cat(dx, dy, race.p.face, 1.0, 1.0, true)
 	for p in fxp:
 		draw_rect(Rect2(Vector2(p.x - p.sz / 2.0, p.y - p.sz / 2.0) + shk_v, Vector2(p.sz, p.sz)), ca(p.col, 1.0 - p.t / p.life))
 	for p in pops:
@@ -594,26 +594,26 @@ func _draw_world_items(lvl: SimLevel) -> void:
 		var x: float = it.cx * TILE
 		var y: float = it.cy * TILE
 		match it.type:
-			"plank":
-				_draw_plank_px(x, y)
-			"spikes":
-				_draw_spikes_px(it)
-			"saw":
-				_draw_saw_px(x + TILE / 2.0, y + TILE / 2.0)
-			"spring":
-				var hit: bool = race != null and spring_hits.has(i) and race.tick - int(spring_hits[i]) < 10
-				_draw_spring_px(x, y, hit)
-			"bow":
-				_draw_bow_px(x, y, 1 if int(it.rot) == 0 else -1)
+			"shelf":
+				_draw_shelf_px(x, y)
+			"cactus":
+				_draw_cactus_px(it)
+			"fan":
+				_draw_fan_px(x + TILE / 2.0, y + TILE / 2.0)
+			"cushion":
+				var hit: bool = race != null and cushion_hits.has(i) and race.tick - int(cushion_hits[i]) < 10
+				_draw_cushion_px(x, y, hit)
+			"launcher":
+				_draw_launcher_px(x, y, 1 if int(it.rot) == 0 else -1)
 
-func _draw_plank_px(x: float, y: float) -> void:
+func _draw_shelf_px(x: float, y: float) -> void:
 	rect(x, y + 4.0, TILE * 3.0, 12.0, C_WOOD)
 	for i in range(3):
 		rect(x + i * TILE + 6.0, y + 7.0, TILE - 12.0, 2.0, C_WOOD_DK)
 	draw_dashed_line(Vector2(x + 2.0, y + 17.0) + shk_v, Vector2(x + TILE * 3.0 - 2.0, y + 17.0) + shk_v, Color(C_BG.r, C_BG.g, C_BG.b, 0.5), 1.5, 4.0)
 
-func _draw_spikes_px(it: Dictionary) -> void:
-	var b := SimLevel.spike_box(it)
+func _draw_cactus_px(it: Dictionary) -> void:
+	var b := SimLevel.cactus_box(it)
 	var x0 := px_of(b.x0)
 	var x1 := px_of(b.x1)
 	var y0 := px_of(b.y0)
@@ -647,56 +647,56 @@ func _draw_spikes_px(it: Dictionary) -> void:
 	else:
 		rect(x1 - 4.0, y0, 4.0, y1 - y0, C_HAZ_DK)
 
-func _draw_saw_px(cx: float, cy: float) -> void:
+func _draw_fan_px(cx: float, cy: float) -> void:
 	var r := 0.78 * TILE
-	draw_set_transform(Vector2(cx, cy) + shk_v, elapsed * 9.0, Vector2.ONE)
-	for i in range(8):
-		draw_set_transform(Vector2(cx, cy) + shk_v, elapsed * 9.0 + i * TAU / 8.0, Vector2.ONE)
-		draw_rect(Rect2(r - 7.0, -4.0, 9.0, 8.0), C_HAZ_DK)
+	for i in range(3):
+		draw_set_transform(Vector2(cx, cy) + shk_v, elapsed * 10.0 + i * TAU / 3.0, Vector2.ONE)
+		draw_colored_polygon(PackedVector2Array([Vector2(3, -3), Vector2(r - 3.0, -9), Vector2(r - 3.0, 5)]), C_HAZ)
 	draw_set_transform(Vector2(cx, cy) + shk_v, 0.0, Vector2.ONE)
-	draw_circle(Vector2.ZERO, r - 4.0, C_HAZ)
-	draw_circle(Vector2.ZERO, r - 12.0, C_HAZ_DK)
-	draw_rect(Rect2(-3.0, -3.0, 6.0, 6.0), C_BG)
+	draw_arc(Vector2.ZERO, r - 1.0, 0.0, TAU, 28, C_HAZ_DK, 3.0)
+	draw_circle(Vector2.ZERO, 4.5, C_HAZ_DK)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
-func _draw_spring_px(x: float, y: float, hit: bool) -> void:
-	var cy := y + (14.0 if hit else 6.0)
-	rect(x + 4.0, y + TILE - 8.0, TILE - 8.0, 8.0, C_SPRING)
-	for i in range(3):
-		draw_line(Vector2(x + 8.0, cy + 8.0 + i * 5.0) + shk_v, Vector2(x + TILE - 8.0, cy + 5.0 + i * 5.0) + shk_v, C_SPRING, 3.0)
-	rect(x + 3.0, cy, TILE - 6.0, 6.0, C_SPRING_HI)
+func _draw_cushion_px(x: float, y: float, hit: bool) -> void:
+	var cy := y + (16.0 if hit else 8.0)
+	rect(x + 2.0, cy, TILE - 4.0, y + TILE - cy, C_SPRING)
+	rect(x + 1.0, cy, TILE - 2.0, 7.0, C_SPRING_HI)
+	rect(x + 9.0, cy + 12.0, 3.0, 3.0, ca(C_BG, 0.4))
+	rect(x + 20.0, cy + 12.0, 3.0, 3.0, ca(C_BG, 0.4))
 
-func _draw_bow_px(x: float, y: float, dir: int) -> void:
-	rect(x + 4.0, y + 8.0, TILE - 8.0, TILE - 12.0, C_TILE_EDGE)
-	var cx := x + TILE / 2.0 + dir * 6.0
-	var cy := y + TILE / 2.0
-	var pts := PackedVector2Array([Vector2(cx, cy - 6.0), Vector2(cx, cy + 6.0), Vector2(cx + dir * 9.0, cy)])
-	for k in range(pts.size()):
-		pts[k] += shk_v
-	draw_colored_polygon(pts, C_HAZ)
-	rect(x + 8.0, y + TILE / 2.0 - 1.0, TILE - 16.0, 2.0, C_BG)
+func _draw_launcher_px(x: float, y: float, dir: int) -> void:
+	rect(x + 3.0, y + 10.0, TILE - 6.0, TILE - 14.0, C_TILE_EDGE)
+	rect(x + TILE / 2.0 + (1.0 if dir > 0 else -13.0), y + TILE / 2.0 - 4.0, 12.0, 8.0, C_HAZ_DK)
+	draw_circle(Vector2(x + TILE / 2.0 + dir * 10.0, y + TILE / 2.0) + shk_v, 4.5, C_HAZ)
+	rect(x + 5.0, y + TILE - 4.0, 5.0, 4.0, C_HAZ_DK)
+	rect(x + TILE - 10.0, y + TILE - 4.0, 5.0, 4.0, C_HAZ_DK)
 
-func _draw_arrow(x: float, y: float, dir: int) -> void:
-	draw_line(Vector2(x - dir * 20.0, y) + shk_v, Vector2(x - dir * 8.0, y) + shk_v, ca(C_HAZ, 0.35), 2.0)
-	rect(x - 8.0, y - 2.0, 16.0, 4.0, C_HAZ)
-	var pts := PackedVector2Array([Vector2(x + dir * 8.0, y - 4.0), Vector2(x + dir * 8.0, y + 4.0), Vector2(x + dir * 13.0, y)])
-	for k in range(pts.size()):
-		pts[k] += shk_v
-	draw_colored_polygon(pts, C_HAZ)
+func _draw_ball(x: float, y: float, dir: int) -> void:
+	draw_line(Vector2(x - dir * 22.0, y) + shk_v, Vector2(x - dir * 9.0, y) + shk_v, ca(C_HAZ, 0.35), 3.0)
+	draw_circle(Vector2(x, y) + shk_v, 6.0, C_HAZ)
+	draw_arc(Vector2(x, y) + shk_v, 3.8, 0.7, 2.5, 10, C_HAZ_DK, 1.5)
 
-func _draw_flag(lvl: SimLevel) -> void:
-	var x := px_of(lvl.flag_cx)
-	var top := px_of(lvl.flag_top)
-	var bot := px_of(lvl.flag_bot)
-	rect(x - 14.0, top - 4.0, 30.0, bot - top + 8.0, ca(C_GOAL, 0.12))
-	rect(x - 2.0, top, 4.0, bot - top, C_TEXT)
-	var wave := sin(elapsed * 5.0) * 3.0
-	var pts := PackedVector2Array([Vector2(x + 2.0, top), Vector2(x + 30.0, top + 8.0 + wave), Vector2(x + 2.0, top + 18.0)])
-	for k in range(pts.size()):
-		pts[k] += shk_v
-	draw_colored_polygon(pts, C_GOAL)
+func _draw_bowl(lvl: SimLevel) -> void:
+	var x := px_of(lvl.bowl_cx)
+	var top := px_of(lvl.bowl_top)
+	var bot := px_of(lvl.bowl_bot)
+	rect(x - 16.0, top - 4.0, 32.0, bot - top + 8.0, ca(C_GOAL, 0.12))
+	rect(x - 13.0, bot - 9.0, 26.0, 9.0, C_GOAL)
+	rect(x - 15.0, bot - 11.0, 30.0, 4.0, C_GOAL)
+	rect(x - 7.0, bot - 14.0, 4.0, 4.0, C_YOU_DK)
+	rect(x - 1.0, bot - 15.0, 4.0, 5.0, C_YOU_DK)
+	rect(x + 4.0, bot - 14.0, 4.0, 4.0, C_YOU_DK)
+	for k in range(2):
+		var ph0 := elapsed * 2.2 + k * 2.4
+		var wx := x - 5.0 + k * 10.0
+		var span := bot - 18.0 - top
+		var prev := Vector2(wx + sin(ph0) * 4.0, bot - 18.0) + shk_v
+		for i in range(1, 7):
+			var cur := Vector2(wx + sin(ph0 + i * 0.9) * 4.0, bot - 18.0 - span * i / 6.0) + shk_v
+			draw_line(prev, cur, ca(C_GOAL, 0.55 - i * 0.07), 2.0)
+			prev = cur
 
-func _draw_chicken(x: float, y: float, face: int, alpha: float, sc: float, animate: bool) -> void:
+func _draw_cat(x: float, y: float, face: int, alpha: float, sc: float, animate: bool) -> void:
 	var sqv := sq if animate else 0.0
 	var bob := 0.0
 	var ph := 0.0
@@ -707,43 +707,45 @@ func _draw_chicken(x: float, y: float, face: int, alpha: float, sc: float, anima
 			bob = sin(run_ph * 6.0) * 1.5
 			ph = sin(run_ph * 6.0)
 	draw_set_transform(Vector2(x, y + bob) + shk_v, 0.0, Vector2(face * sc * (1.0 + sqv * 0.8), sc * (1.0 - sqv)))
-	var leg := C_HAZ_DK
-	leg.a *= alpha
-	draw_line(Vector2(-4, -8), Vector2(-4 + (-2.0 if air else ph * 4.0), 0), leg, 2.5)
-	draw_line(Vector2(4, -8), Vector2(4 + (2.0 if air else -ph * 4.0), 0), leg, 2.5)
-	draw_rect(Rect2(-11, -26, 22, 19), ca(C_YOU, alpha))
-	draw_rect(Rect2(-8, -20, 9, 8), ca(C_YOU_DK, alpha))
-	draw_rect(Rect2(1, -34, 12, 12), ca(C_YOU, alpha))
-	draw_rect(Rect2(3, -37, 3, 4), ca(C_HAZ, alpha))
-	draw_rect(Rect2(7, -38, 3, 5), ca(C_HAZ, alpha))
-	draw_colored_polygon(PackedVector2Array([Vector2(13, -29), Vector2(19, -27), Vector2(13, -25)]), ca(C_HAZ, alpha))
-	draw_rect(Rect2(8, -31, 3, 3), ca(C_BG, alpha))
-	draw_colored_polygon(PackedVector2Array([Vector2(-11, -22), Vector2(-17, -28), Vector2(-10, -17)]), ca(C_YOU_DK, alpha))
+	var leg := ca(C_YOU_DK, alpha)
+	draw_line(Vector2(-7, -8), Vector2(-7 + (-2.0 if air else ph * 4.0), 0), leg, 3.0)
+	draw_line(Vector2(5, -8), Vector2(5 + (2.0 if air else -ph * 4.0), 0), leg, 3.0)
+	var tail := ca(C_YOU, alpha)
+	draw_line(Vector2(-11, -18), Vector2(-17, -25), tail, 3.0)
+	draw_line(Vector2(-17, -25), Vector2(-14, -31), tail, 3.0)
+	draw_rect(Rect2(-12, -22, 24, 14), ca(C_YOU, alpha))
+	draw_rect(Rect2(-6, -22, 3, 14), ca(C_YOU_DK, alpha))
+	draw_rect(Rect2(1, -22, 3, 14), ca(C_YOU_DK, alpha))
+	draw_rect(Rect2(4, -34, 14, 13), ca(C_YOU, alpha))
+	draw_colored_polygon(PackedVector2Array([Vector2(5, -34), Vector2(7, -40), Vector2(10, -34)]), ca(C_YOU, alpha))
+	draw_colored_polygon(PackedVector2Array([Vector2(12, -34), Vector2(15, -40), Vector2(17, -34)]), ca(C_YOU, alpha))
+	draw_rect(Rect2(12, -30, 3, 3), ca(C_BG, alpha))
+	draw_colored_polygon(PackedVector2Array([Vector2(18, -26), Vector2(20, -25), Vector2(18, -24)]), ca(C_HAZ_DK, alpha))
+	var wisk := ca(C_TEXT, alpha * 0.65)
+	draw_line(Vector2(17, -27), Vector2(22, -28), wisk, 1.0)
+	draw_line(Vector2(17, -25), Vector2(22, -24), wisk, 1.0)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
-func _draw_horse(x: float, y: float, face: int, alpha: float, sc: float = 1.0) -> void:
+func _draw_copycat(x: float, y: float, face: int, alpha: float, sc: float = 1.0) -> void:
 	var bob := sin(elapsed * 6.0 + x * 0.03) * 1.5
 	draw_set_transform(Vector2(x, y + bob) + shk_v, 0.0, Vector2(face * sc, sc))
 	var g := ca(C_GHOST, alpha)
-	draw_line(Vector2(-8, -10), Vector2(-8, 0), g, 2.5)
-	draw_line(Vector2(-3, -10), Vector2(-3, 0), g, 2.5)
-	draw_line(Vector2(4, -10), Vector2(4, 0), g, 2.5)
-	draw_line(Vector2(9, -10), Vector2(9, 0), g, 2.5)
-	draw_rect(Rect2(-13, -24, 26, 15), g)
-	draw_rect(Rect2(6, -34, 9, 14), g)
-	draw_rect(Rect2(9, -36, 12, 8), g)
-	draw_rect(Rect2(7, -39, 3, 4), g)
-	draw_rect(Rect2(12, -39, 3, 4), g)
-	for i in range(3):
-		draw_rect(Rect2(2 - i * 4, -27 + i * 2, 3, 4), g)
-	draw_rect(Rect2(14, -34, 3, 3), ca(C_BG, alpha))
-	draw_colored_polygon(PackedVector2Array([Vector2(-13, -20), Vector2(-19, -14), Vector2(-12, -14)]), g)
+	draw_line(Vector2(-7, -8), Vector2(-7, 0), g, 3.0)
+	draw_line(Vector2(5, -8), Vector2(5, 0), g, 3.0)
+	draw_line(Vector2(-11, -18), Vector2(-16, -24), g, 3.0)
+	draw_line(Vector2(-16, -24), Vector2(-12, -29), g, 3.0)
+	draw_line(Vector2(-12, -29), Vector2(-16, -33), g, 3.0)
+	draw_rect(Rect2(-12, -22, 24, 14), g)
+	draw_rect(Rect2(4, -34, 14, 13), g)
+	draw_colored_polygon(PackedVector2Array([Vector2(5, -34), Vector2(7, -40), Vector2(10, -34)]), g)
+	draw_colored_polygon(PackedVector2Array([Vector2(12, -34), Vector2(15, -40), Vector2(17, -34)]), g)
+	draw_rect(Rect2(12, -30, 3, 3), ca(C_BG, alpha))
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 func _draw_ghosts() -> void:
 	if scene == "place":
 		for i in range(m.roster.size()):
-			_draw_horse(px_of(place_level.spawn_px) + (i - 1) * 16.0, px_of(place_level.spawn_py), 1, 0.45)
+			_draw_copycat(px_of(place_level.spawn_px) + (i - 1) * 16.0, px_of(place_level.spawn_py), 1, 0.45)
 		return
 	if race == null:
 		return
@@ -767,14 +769,14 @@ func _draw_ghosts() -> void:
 			draw_rect(Rect2(Vector2(tr.x - 12.0, tr.y - 24.0) + shk_v, Vector2(24.0, 18.0)), ca(C_GHOST, 0.08))
 		var a := 0.45 + sin(elapsed * 3.0 + i * 2.0) * 0.06
 		var off := 0.0 if racing else (i - 1) * 16.0
-		_draw_horse(gx + off, gy, int(st.faces[t]), a)
+		_draw_copycat(gx + off, gy, int(st.faces[t]), a)
 
 # ---------- hud + screens ----------
 
 func _draw_hud() -> void:
-	_draw_chicken(26.0, 42.0, 1, 1.0, 0.62, false)
+	_draw_cat(26.0, 42.0, 1, 1.0, 0.62, false)
 	txt_l(44.0, 32.0, "%02d" % m.you, 19, C_YOU)
-	_draw_horse(W - 28.0, 42.0, -1, 0.8, 1.0)
+	_draw_copycat(W - 28.0, 42.0, -1, 0.8, 1.0)
 	draw_string(font_v, Vector2(W - 446.0, 32.0), "%02d" % m.foes, HORIZONTAL_ALIGNMENT_RIGHT, 400.0, 19, C_GHOST)
 	var head := "DAILY  -  " if daily_mode else ""
 	txt_c(W / 2.0, 20.0, head + "ROUND %d  -  FIRST TO %d" % [m.round_n, SimC.TARGET_SCORE], 13, C_DIM)
@@ -830,19 +832,19 @@ func _draw_card(type: String, r: Rect2) -> void:
 	draw_rect(r, C_TILE_EDGE, false, 2.0)
 	var cx := r.position.x + r.size.x / 2.0
 	var cy := r.position.y + 30.0
-	var sc := 0.55 if type == "plank" else 0.8
+	var sc := 0.55 if type == "shelf" else 0.8
 	draw_set_transform(Vector2(cx, cy), 0.0, Vector2(sc, sc))
 	match type:
-		"plank":
-			_draw_plank_px(-TILE * 1.5, -TILE / 2.0)
-		"spikes":
-			_draw_spikes_px({ "type": "spikes", "cx": -1, "cy": -1, "rot": 0 })
-		"saw":
-			_draw_saw_px(0.0, 0.0)
-		"spring":
-			_draw_spring_px(-TILE / 2.0, -TILE / 2.0, false)
-		"bow":
-			_draw_bow_px(-TILE / 2.0, -TILE / 2.0, 1)
+		"shelf":
+			_draw_shelf_px(-TILE * 1.5, -TILE / 2.0)
+		"cactus":
+			_draw_cactus_px({ "type": "cactus", "cx": -1, "cy": -1, "rot": 0 })
+		"fan":
+			_draw_fan_px(0.0, 0.0)
+		"cushion":
+			_draw_cushion_px(-TILE / 2.0, -TILE / 2.0, false)
+		"launcher":
+			_draw_launcher_px(-TILE / 2.0, -TILE / 2.0, 1)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	var d: Dictionary = SimLevel.DEFS[type]
 	var name_col := C_HAZ if bool(d.hazard) else C_TEXT
@@ -850,16 +852,16 @@ func _draw_card(type: String, r: Rect2) -> void:
 
 func _draw_preview(type: String, cx: int, cy: int, rot: int, valid: bool) -> void:
 	match type:
-		"plank":
-			_draw_plank_px(cx * TILE, cy * TILE)
-		"spikes":
-			_draw_spikes_px({ "type": "spikes", "cx": cx, "cy": cy, "rot": rot })
-		"saw":
-			_draw_saw_px((cx + 0.5) * TILE, (cy + 0.5) * TILE)
-		"spring":
-			_draw_spring_px(cx * TILE, cy * TILE, false)
-		"bow":
-			_draw_bow_px(cx * TILE, cy * TILE, 1 if rot == 0 else -1)
+		"shelf":
+			_draw_shelf_px(cx * TILE, cy * TILE)
+		"cactus":
+			_draw_cactus_px({ "type": "cactus", "cx": cx, "cy": cy, "rot": rot })
+		"fan":
+			_draw_fan_px((cx + 0.5) * TILE, (cy + 0.5) * TILE)
+		"cushion":
+			_draw_cushion_px(cx * TILE, cy * TILE, false)
+		"launcher":
+			_draw_launcher_px(cx * TILE, cy * TILE, 1 if rot == 0 else -1)
 	var r := _cells_rect_px(SimLevel.item_cells(type, cx, cy, rot)).grow(3.0)
 	var col := C_GOAL if valid else C_HAZ
 	draw_rect(r, col, false, 2.5)
@@ -899,19 +901,19 @@ func _draw_recap() -> void:
 	var sub := ""
 	match sc.key:
 		"first":
-			title = "FIRST FLAG"
-			sub = "your run is now a ghost horse"
+			title = "FIRST DINNER"
+			sub = "this run now races you as a copycat"
 		"too_easy":
 			title = "TOO EASY"
-			sub = "everyone made it. no points."
-		"dunked":
-			title = "%d HORSE%s DUNKED" % [sc.dunks, "S" if int(sc.dunks) > 1 else ""]
+			sub = "everyone landed on their feet. no points."
+		"swatted":
+			title = "%d COPYCAT%s SWATTED" % [sc.dunks, "S" if int(sc.dunks) > 1 else ""]
 			col = C_YOU
-			sub = "+1 flag  +%d dunk%s" % [sc.dunks, "s" if int(sc.dunks) > 1 else ""]
-		"horses":
-			title = "THE HORSES SCORE"
+			sub = "+1 dinner  +%d swat%s" % [sc.dunks, "s" if int(sc.dunks) > 1 else ""]
+		"copycats":
+			title = "THE COPYCATS SCORE"
 			col = C_HAZ
-			sub = "%d ghost%s finished without you" % [sc.d_foes, "s" if int(sc.d_foes) > 1 else ""]
+			sub = "%d copycat%s got to dinner without you" % [sc.d_foes, "s" if int(sc.d_foes) > 1 else ""]
 		"wash":
 			title = "WASH"
 			sub = "everybody ate it. no points."
@@ -920,15 +922,15 @@ func _draw_recap() -> void:
 	if int(sc.d_you) > 0:
 		txt_c(W / 2.0, H / 2.0 + 34.0, "+%d YOU" % sc.d_you, 20, C_YOU)
 	elif int(sc.d_foes) > 0:
-		txt_c(W / 2.0, H / 2.0 + 34.0, "+%d HORSES" % sc.d_foes, 20, C_GHOST)
+		txt_c(W / 2.0, H / 2.0 + 34.0, "+%d COPYCATS" % sc.d_foes, 20, C_GHOST)
 	if recap.t > 0.9:
 		txt_c(W / 2.0, H / 2.0 + 66.0, "tap to continue", 12, C_FAINT)
 
 func _draw_over() -> void:
 	draw_rect(Rect2(0, 0, W, H), Color(C_VOID.r, C_VOID.g, C_VOID.b, 0.75))
-	txt_c(W / 2.0, H / 2.0 - 52.0, "CHICKEN DINNER" if over_won else "HORSED", 44, C_YOU if over_won else C_GHOST)
-	txt_c(W / 2.0, H / 2.0 - 18.0, "you outran every ghost of yourself" if over_won else "your past selves finished without you", 15, C_TEXT)
-	txt_c(W / 2.0, H / 2.0 + 10.0, "YOU %d  -  HORSES %d  -  %d ROUNDS" % [m.you, m.foes, m.round_n], 14, C_DIM)
+	txt_c(W / 2.0, H / 2.0 - 52.0, "TOP CAT" if over_won else "DINNER STOLEN", 44, C_YOU if over_won else C_GHOST)
+	txt_c(W / 2.0, H / 2.0 - 18.0, "you outran every copy of yourself" if over_won else "your copycats ate your dinner", 15, C_TEXT)
+	txt_c(W / 2.0, H / 2.0 + 10.0, "YOU %d  -  COPYCATS %d  -  %d ROUNDS" % [m.you, m.foes, m.round_n], 14, C_DIM)
 	if daily_mode:
 		var s := "daily %s" % daily_date
 		if daily_best_today > 0:
@@ -940,17 +942,17 @@ func _draw_over() -> void:
 
 func _draw_title() -> void:
 	var cx := W / 2.0
-	_draw_chicken(cx - 150.0, H * 0.46, 1, 1.0, 1.6, false)
-	_draw_horse(cx + 150.0, H * 0.46, -1, 0.55, 1.6)
-	var word := "CHICKHO"
-	var x := cx - 128.0
+	_draw_cat(cx - 150.0, H * 0.46, 1, 1.0, 1.6, false)
+	_draw_copycat(cx + 150.0, H * 0.46, -1, 0.55, 1.6)
+	var word := "COPYCATS"
+	var x := cx - 133.0
 	for i in range(word.length()):
-		var col := C_YOU if i < 5 else C_GHOST
+		var col := C_GHOST if i < 4 else C_YOU
 		var dy := sin(elapsed * 3.0 + i * 0.7) * 4.0
 		txt_c(x, H * 0.24 + dy, word[i], 58, col)
 		x += 38.0
-	txt_c(cx, H * 0.36, "place a trap. race the ghost horses of your past runs.", 14, C_TEXT)
-	txt_c(cx, H * 0.36 + 20.0, "finish while they fall - first to %d wins" % SimC.TARGET_SCORE, 14, C_DIM)
+	txt_c(cx, H * 0.36, "knock stuff over. race the copycats of your past lives.", 14, C_TEXT)
+	txt_c(cx, H * 0.36 + 20.0, "reach dinner while they fall - first to %d wins" % SimC.TARGET_SCORE, 14, C_DIM)
 	var pr := _title_play_rect()
 	draw_rect(pr, C_TILE)
 	draw_rect(pr, C_YOU, false, 2.0)

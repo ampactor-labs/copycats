@@ -3,7 +3,7 @@ extends RefCounted
 # The chaos bot: always runs right, jumps in seeded random bursts. It has
 # two jobs. In tests it farms ghost runs. In production it is the
 # beatability prover for generated levels — a daily level ships with a
-# bot run that genuinely reaches the flag, or it doesn't ship.
+# bot run that genuinely reaches the bowl, or it doesn't ship.
 
 static func bot_log(seed_v: int) -> PackedByteArray:
 	var r := SimRNG.new(seed_v)

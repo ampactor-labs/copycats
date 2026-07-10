@@ -38,7 +38,7 @@ static func spawn(lvl: SimLevel) -> SimPlayer:
 	p.py = lvl.spawn_py
 	return p
 
-func step(lvl: SimLevel, arrows: Array, spring_last: Dictionary, b: int, tick: int, ev: Array) -> void:
+func step(lvl: SimLevel, arrows: Array, cushion_last: Dictionary, b: int, tick: int, ev: Array) -> void:
 	if dead or finished:
 		return
 	var axis := (b & 0xF) - 7
@@ -101,7 +101,7 @@ func step(lvl: SimLevel, arrows: Array, spring_last: Dictionary, b: int, tick: i
 	_move_x(lvl)
 	_move_y(lvl, ev)
 
-	if _hazards(lvl, arrows, spring_last, tick, ev):
+	if _hazards(lvl, arrows, cushion_last, tick, ev):
 		return
 	if py - SimC.PH > SimC.GH * SimC.FP + (SimC.FP * 3) / 2:
 		_die(tick, ev)
@@ -123,40 +123,40 @@ func _overlap(r: Dictionary) -> bool:
 	return px - SimC.HW < r.x1 and px + SimC.HW > r.x0 \
 		and py - SimC.PH < r.y1 and py > r.y0
 
-func _hazards(lvl: SimLevel, arrows: Array, spring_last: Dictionary, tick: int, ev: Array) -> bool:
+func _hazards(lvl: SimLevel, arrows: Array, cushion_last: Dictionary, tick: int, ev: Array) -> bool:
 	for i in range(lvl.items.size()):
 		var it: Dictionary = lvl.items[i]
-		if it.type == "spikes":
-			if _overlap(SimLevel.spike_box(it)):
+		if it.type == "cactus":
+			if _overlap(SimLevel.cactus_box(it)):
 				_die(tick, ev)
 				return true
-		elif it.type == "saw":
-			if _saw_hit(it):
+		elif it.type == "fan":
+			if _fan_hit(it):
 				_die(tick, ev)
 				return true
-		elif it.type == "spring":
-			if vy > SPRING_MIN_VY and tick - int(spring_last.get(i, -999)) > SimC.SPRING_CD_T:
+		elif it.type == "cushion":
+			if vy > SPRING_MIN_VY and tick - int(cushion_last.get(i, -999)) > SimC.SPRING_CD_T:
 				var f := SimC.FP
 				var box := { "x0": it.cx * f + f / 10, "x1": (it.cx + 1) * f - f / 10,
 					"y0": it.cy * f + (f * 4) / 10, "y1": (it.cy + 1) * f }
 				if _overlap(box):
 					vy = SimC.SPRING_VY
-					spring_last[i] = tick
-					ev.append({ "t": "spring", "x": px, "y": py, "i": i })
+					cushion_last[i] = tick
+					ev.append({ "t": "cushion", "x": px, "y": py, "i": i })
 	for a in arrows:
 		if _overlap(a):
 			_die(tick, ev)
 			return true
 	return false
 
-func _saw_hit(it: Dictionary) -> bool:
+func _fan_hit(it: Dictionary) -> bool:
 	var cx: int = it.cx * SimC.FP + SimC.FP / 2
 	var cy: int = it.cy * SimC.FP + SimC.FP / 2
 	var qx := clampi(cx, px - SimC.HW, px + SimC.HW)
 	var qy := clampi(cy, py - SimC.PH, py)
 	var dx := cx - qx
 	var dy := cy - qy
-	return dx * dx + dy * dy < SimC.SAW_R2
+	return dx * dx + dy * dy < SimC.FAN_R2
 
 func _on_plank(lvl: SimLevel) -> bool:
 	var row := SimC.rdiv(py)

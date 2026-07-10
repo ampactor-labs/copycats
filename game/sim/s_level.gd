@@ -24,21 +24,21 @@ const ROWS := [
 
 const SPAWN_PX := 229376          # feet at (3.5, 13.0) tiles
 const SPAWN_PY := 851968
-const FLAG_TOP := 235930          # goal zone, subunits
-const FLAG_BOT := 393216
-const FLAG_CX := 1474560          # 22.5 t
+const BOWL_TOP := 235930          # goal zone, subunits
+const BOWL_BOT := 393216
+const BOWL_CX := 1474560          # 22.5 t
 const GOAL_HW := 58982            # 0.9 t
 # no-placement zones, in cells: around spawn and around the flag
 const SAFE := [[1, 9, 5, 5], [19, 1, 7, 6]]
 
 const DEFS := {
-	"plank":  { "w": 3, "h": 1, "rots": 1, "hazard": false },
-	"spikes": { "w": 2, "h": 1, "rots": 4, "hazard": true },
-	"saw":    { "w": 1, "h": 1, "rots": 1, "hazard": true },
-	"spring": { "w": 1, "h": 1, "rots": 1, "hazard": false },
-	"bow":    { "w": 1, "h": 1, "rots": 2, "hazard": true },
+	"shelf":  { "w": 3, "h": 1, "rots": 1, "hazard": false },
+	"cactus": { "w": 2, "h": 1, "rots": 4, "hazard": true },
+	"fan":    { "w": 1, "h": 1, "rots": 1, "hazard": true },
+	"cushion": { "w": 1, "h": 1, "rots": 1, "hazard": false },
+	"launcher":    { "w": 1, "h": 1, "rots": 2, "hazard": true },
 }
-const TYPE_ID := { "plank": 0, "spikes": 1, "saw": 2, "spring": 3, "bow": 4 }
+const TYPE_ID := { "shelf": 0, "cactus": 1, "fan": 2, "cushion": 3, "launcher": 4 }
 
 var grid := PackedByteArray()
 var one_way := {}                 # cell index -> true
@@ -47,9 +47,9 @@ var rows := PackedStringArray()   # geometry source, kept for derive()
 # per-level geometry; defaults are the classic layout, generators override
 var spawn_px: int = SPAWN_PX
 var spawn_py: int = SPAWN_PY
-var flag_cx: int = FLAG_CX
-var flag_top: int = FLAG_TOP
-var flag_bot: int = FLAG_BOT
+var bowl_cx: int = BOWL_CX
+var bowl_top: int = BOWL_TOP
+var bowl_bot: int = BOWL_BOT
 var safe: Array = SAFE
 
 static func build(item_list: Array, rows_in := PackedStringArray()) -> SimLevel:
@@ -69,9 +69,9 @@ static func derive(base: SimLevel, item_list: Array) -> SimLevel:
 	var l := build(item_list, base.rows)
 	l.spawn_px = base.spawn_px
 	l.spawn_py = base.spawn_py
-	l.flag_cx = base.flag_cx
-	l.flag_top = base.flag_top
-	l.flag_bot = base.flag_bot
+	l.bowl_cx = base.bowl_cx
+	l.bowl_top = base.bowl_top
+	l.bowl_bot = base.bowl_bot
 	l.safe = base.safe
 	return l
 
@@ -84,7 +84,7 @@ static func items_upto(item_list: Array, round_n: int) -> Array:
 
 func add_item(it: Dictionary) -> void:
 	items.append(it)
-	if it.type == "plank":
+	if it.type == "shelf":
 		for c in item_cells(it.type, it.cx, it.cy, it.rot):
 			one_way[c.y * SimC.GW + c.x] = true
 
@@ -100,7 +100,7 @@ func one_way_at(cx: int, cy: int) -> bool:
 
 static func item_size(type: String, rot: int) -> Vector2i:
 	var d: Dictionary = DEFS[type]
-	if type == "spikes" and (rot == 1 or rot == 3):
+	if type == "cactus" and (rot == 1 or rot == 3):
 		return Vector2i(d.h, d.w)
 	return Vector2i(d.w, d.h)
 
@@ -127,7 +127,7 @@ func place_valid(type: String, cx: int, cy: int, rot: int) -> bool:
 				return false
 	return true
 
-static func spike_box(it: Dictionary) -> Dictionary:
+static func cactus_box(it: Dictionary) -> Dictionary:
 	# thin kill slab against the item's base surface, subunits
 	var f := SimC.FP
 	var t := f / 2
@@ -145,4 +145,4 @@ static func spike_box(it: Dictionary) -> Dictionary:
 			return { "x0": (cx + 1) * f - t, "x1": (cx + 1) * f, "y0": cy * f + inset, "y1": (cy + 2) * f - inset }
 
 func goal_rect() -> Dictionary:
-	return { "x0": flag_cx - GOAL_HW, "x1": flag_cx + GOAL_HW, "y0": flag_top, "y1": flag_bot }
+	return { "x0": bowl_cx - GOAL_HW, "x1": bowl_cx + GOAL_HW, "y0": bowl_top, "y1": bowl_bot }

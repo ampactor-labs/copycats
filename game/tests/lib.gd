@@ -35,21 +35,21 @@ static func bot_log(seed_v: int) -> PackedByteArray:
 static func farm_finishing(max_seeds: int) -> PackedByteArray:
 	return SimBot.farm_finishing(SimLevel.build([]), max_seeds)
 
-static func saw_on_path(st: Dictionary, lvl: SimLevel) -> Dictionary:
+static func fan_on_path(st: Dictionary, lvl: SimLevel) -> Dictionary:
 	# first placeable saw cell along a recorded stream; {} if none
 	var t: int = int(st.len) / 3
 	while t < int(st.len):
 		var cx := SimC.fdiv(int(st.xs[t]))
 		var cy := SimC.fdiv(int(st.ys[t]) - SimC.FP / 2)
-		if lvl.place_valid("saw", cx, cy, 0):
+		if lvl.place_valid("fan", cx, cy, 0):
 			return { "cx": cx, "cy": cy }
 		t += 5
 	return {}
 
 static func test_items() -> Array:
 	return [
-		{ "type": "saw", "cx": 8, "cy": 12, "rot": 0, "round": 1 },
-		{ "type": "spikes", "cx": 16, "cy": 12, "rot": 0, "round": 1 },
-		{ "type": "spring", "cx": 6, "cy": 12, "rot": 0, "round": 1 },
-		{ "type": "bow", "cx": 2, "cy": 8, "rot": 0, "round": 1 },
+		{ "type": "fan", "cx": 8, "cy": 12, "rot": 0, "round": 1 },
+		{ "type": "cactus", "cx": 16, "cy": 12, "rot": 0, "round": 1 },
+		{ "type": "cushion", "cx": 6, "cy": 12, "rot": 0, "round": 1 },
+		{ "type": "launcher", "cx": 2, "cy": 8, "rot": 0, "round": 1 },
 	]

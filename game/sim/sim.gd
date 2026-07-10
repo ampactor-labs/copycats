@@ -3,8 +3,8 @@ extends RefCounted
 # Match-level state: rounds, items, the ghost roster, scoring. Owns the
 # deterministic RNG so a match is reproducible from its seed.
 
-const POOL := ["plank", "spikes", "saw", "spring", "bow"]
-const HAZARDS := ["spikes", "saw", "bow"]
+const POOL := ["shelf", "cactus", "fan", "cushion", "launcher"]
+const HAZARDS := ["cactus", "fan", "launcher"]
 
 var rng: SimRNG
 var seed_v: int
@@ -58,9 +58,9 @@ static func score_round(finished: bool, fates: Array) -> Dictionary:
 			return { "d_you": 1, "d_foes": 0, "key": "first", "dunks": 0 }
 		if dunks == 0:
 			return { "d_you": 0, "d_foes": 0, "key": "too_easy", "dunks": 0 }
-		return { "d_you": 1 + dunks, "d_foes": 0, "key": "dunked", "dunks": dunks }
+		return { "d_you": 1 + dunks, "d_foes": 0, "key": "swatted", "dunks": dunks }
 	if survivors > 0:
-		return { "d_you": 0, "d_foes": survivors, "key": "horses", "dunks": dunks }
+		return { "d_you": 0, "d_foes": survivors, "key": "copycats", "dunks": dunks }
 	return { "d_you": 0, "d_foes": 0, "key": "wash", "dunks": dunks }
 
 func finish_race(race: SimRace) -> Dictionary:

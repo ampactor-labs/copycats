@@ -15,14 +15,14 @@ var tick: int = 0
 var inputs := PackedByteArray()   # the live run's input log (the replay)
 var ghost_streams: Array = []     # {xs, ys, faces, len, finished}
 var fates: Array = []             # {death: tick or -1, done: tick}
-var spring_last := {}             # item index -> last trigger tick
+var cushion_last := {}             # item index -> last trigger tick
 var events: Array = []            # drained by the shell each tick; cosmetic
 
 static func create(all_items: Array, roster: Array, template: SimLevel = null) -> SimRace:
 	var base := template if template != null else SimLevel.build([])
 	var r := SimRace.new()
 	r.level = SimLevel.derive(base, all_items)
-	r.tracks = schedule_arrows(r.level)
+	r.tracks = schedule_balls(r.level)
 	r.p = SimPlayer.spawn(r.level)
 	for g in roster:
 		var lvl_g := SimLevel.derive(base, SimLevel.items_upto(all_items, g.round))
@@ -36,10 +36,10 @@ static func create(all_items: Array, roster: Array, template: SimLevel = null) -
 		r.fates.append({ "death": death, "done": death if death >= 0 else st.len })
 	return r
 
-static func schedule_arrows(lvl: SimLevel) -> Array:
+static func schedule_balls(lvl: SimLevel) -> Array:
 	var out: Array = []
 	for it in lvl.items:
-		if it.type != "bow":
+		if it.type != "launcher":
 			continue
 		var dir := 1 if it.rot == 0 else -1
 		var cx: int = it.cx + (1 if dir > 0 else 0)
@@ -48,29 +48,29 @@ static func schedule_arrows(lvl: SimLevel) -> Array:
 			cx += dir
 			d += 1
 		var travel := d * SimC.FP + (SimC.FP * 6) / 10
-		var life := (travel + SimC.ARROW_V - 1) / SimC.ARROW_V
-		var t0 := SimC.ARROW_FIRST
+		var life := (travel + SimC.BALL_V - 1) / SimC.BALL_V
+		var t0 := SimC.BALL_FIRST
 		while t0 < SimC.ROUND_TICKS:
 			out.append({ "t0": t0, "life": life,
 				"x0": it.cx * SimC.FP + SimC.FP / 2, "y": it.cy * SimC.FP + SimC.FP / 2,
 				"dir": dir, "round": it.round })
-			t0 += SimC.ARROW_EVERY
+			t0 += SimC.BALL_EVERY
 	return out
 
-static func arrows_at(tracks_in: Array, t: int) -> Array:
+static func balls_at(tracks_in: Array, t: int) -> Array:
 	var out: Array = []
 	for tr in tracks_in:
 		var dt: int = t - tr.t0
 		if dt < 0 or dt >= tr.life:
 			continue
-		var x: int = tr.x0 + tr.dir * SimC.ARROW_V * dt
-		out.append({ "x0": x - SimC.ARROW_HW, "x1": x + SimC.ARROW_HW,
-			"y0": tr.y - SimC.ARROW_HH, "y1": tr.y + SimC.ARROW_HH,
+		var x: int = tr.x0 + tr.dir * SimC.BALL_V * dt
+		out.append({ "x0": x - SimC.BALL_HW, "x1": x + SimC.BALL_HW,
+			"y0": tr.y - SimC.BALL_HH, "y1": tr.y + SimC.BALL_HH,
 			"xc": x, "yc": tr.y, "dir": tr.dir, "round": tr.round })
 	return out
 
 static func resim(log_bytes: PackedByteArray, lvl: SimLevel) -> Dictionary:
-	var tr := schedule_arrows(lvl)
+	var tr := schedule_balls(lvl)
 	var pl := SimPlayer.spawn(lvl)
 	var cd := {}
 	var ev: Array = []
@@ -78,7 +78,7 @@ static func resim(log_bytes: PackedByteArray, lvl: SimLevel) -> Dictionary:
 	var ys := PackedInt64Array()
 	var faces := PackedInt32Array()
 	for t in range(log_bytes.size()):
-		pl.step(lvl, arrows_at(tr, t), cd, log_bytes[t], t, ev)
+		pl.step(lvl, balls_at(tr, t), cd, log_bytes[t], t, ev)
 		xs.append(pl.px)
 		ys.append(pl.py)
 		faces.append(pl.face)
@@ -99,18 +99,18 @@ static func compute_fate(st: Dictionary, newer_items: Array, all_tracks: Array, 
 		var by0 := y - SimC.PH
 		var by1 := y
 		for it in newer_items:
-			if it.type == "spikes":
-				var b: Dictionary = SimLevel.spike_box(it)
+			if it.type == "cactus":
+				var b: Dictionary = SimLevel.cactus_box(it)
 				if bx0 < b.x1 and bx1 > b.x0 and by0 < b.y1 and by1 > b.y0:
 					return t
-			elif it.type == "saw":
+			elif it.type == "fan":
 				var cx: int = it.cx * SimC.FP + SimC.FP / 2
 				var cy: int = it.cy * SimC.FP + SimC.FP / 2
 				var qx := clampi(cx, bx0, bx1)
 				var qy := clampi(cy, by0, by1)
-				if (cx - qx) * (cx - qx) + (cy - qy) * (cy - qy) < SimC.SAW_R2:
+				if (cx - qx) * (cx - qx) + (cy - qy) * (cy - qy) < SimC.FAN_R2:
 					return t
-		for a in arrows_at(newer_tracks, t):
+		for a in balls_at(newer_tracks, t):
 			if bx0 < a.x1 and bx1 > a.x0 and by0 < a.y1 and by1 > a.y0:
 				return t
 	return -1
@@ -119,12 +119,12 @@ func step(b: int) -> void:
 	var alive := not (p.dead or p.finished)
 	if alive:
 		inputs.append(b)
-		p.step(level, arrows_at(tracks, tick), spring_last, b, tick, events)
+		p.step(level, balls_at(tracks, tick), cushion_last, b, tick, events)
 	for i in range(fates.size()):
 		var f: Dictionary = fates[i]
 		if f.death == tick:
 			var st: Dictionary = ghost_streams[i]
-			events.append({ "t": "dunk", "i": i, "x": st.xs[f.death], "y": st.ys[f.death] })
+			events.append({ "t": "swat", "i": i, "x": st.xs[f.death], "y": st.ys[f.death] })
 		elif f.death < 0 and tick == st_len(i):
 			events.append({ "t": "gfinish", "i": i })
 	tick += 1
@@ -172,5 +172,5 @@ func checksum() -> int:
 	if p.down_prev: flags |= 16
 	h = SimC.fnv_int(h, flags * p.face)
 	for i in range(level.items.size()):
-		h = SimC.fnv_int(h, int(spring_last.get(i, -999)))
+		h = SimC.fnv_int(h, int(cushion_last.get(i, -999)))
 	return h

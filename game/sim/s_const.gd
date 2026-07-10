@@ -9,7 +9,7 @@ const TICKS := 60                 # sim rate
 const GW := 26
 const GH := 15
 const ROUND_TICKS := 45 * 60
-const TARGET_SCORE := 12
+const TARGET_SCORE := 9
 const MAX_GHOSTS := 3
 const SIM_VERSION := 1
 
@@ -43,13 +43,13 @@ const HARD_LAND_VY := 6553        # 6 t/s, cosmetic threshold
 # bodies
 const HW := 20316                 # player half width, 0.31 t
 const PH := 57672                 # player height, 0.88 t
-const SAW_R := 51118              # 0.78 t
-const SAW_R2 := SAW_R * SAW_R
-const ARROW_V := 13107            # 12 t/s
-const ARROW_FIRST := 30
-const ARROW_EVERY := 120
-const ARROW_HW := (FP * 28) / 100
-const ARROW_HH := (FP * 9) / 100
+const FAN_R := 51118              # 0.78 t
+const FAN_R2 := FAN_R * FAN_R
+const BALL_V := 13107            # 12 t/s
+const BALL_FIRST := 30
+const BALL_EVERY := 120
+const BALL_HW := (FP * 28) / 100
+const BALL_HH := (FP * 9) / 100
 
 # input byte layout: bits 0-3 axis+7 (0..14), bit 4 jump held, bit 5 down held.
 const BIT_JUMP := 16

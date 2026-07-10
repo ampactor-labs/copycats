@@ -22,7 +22,7 @@ func _initialize() -> void:
 		return
 
 	var lines := PackedStringArray()
-	lines.append("# chickho determinism dump\tsim_version=%d" % SimC.SIM_VERSION)
+	lines.append("# copycats determinism dump\tsim_version=%d" % SimC.SIM_VERSION)
 
 	# scenario 1: physics soak
 	var log1 := L.rand_log(0xC41C, 900)
@@ -45,10 +45,10 @@ func _initialize() -> void:
 		return
 	var lvl0 := SimLevel.build([])
 	var st := SimRace.resim(dec.inputs, lvl0)
-	var saw := L.saw_on_path(st, lvl0)
+	var saw := L.fan_on_path(st, lvl0)
 	var items2: Array = []
 	if not saw.is_empty():
-		items2.append({ "type": "saw", "cx": saw.cx, "cy": saw.cy, "rot": 0, "round": 2 })
+		items2.append({ "type": "fan", "cx": saw.cx, "cy": saw.cy, "rot": 0, "round": 2 })
 	var roster := [{ "inputs": dec.inputs, "round": 1, "len": int(st.len) }]
 	var race2 := SimRace.create(items2, roster)
 	lines.append("s2_fate\t%d\t%d" % [race2.fates[0].death, race2.fates[0].done])

@@ -1,7 +1,7 @@
 class_name SimGen
 extends RefCounted
 # Seeded level generation for the daily. generate() lays out ground with
-# a pit, a ladder of rise-2 platforms toward a flag platform, and a few
+# a pit, a ladder of rise-2 platforms toward a bowl platform, and a few
 # floaters, all from one deterministic RNG stream. daily() proves each
 # candidate beatable by farming a finishing bot run and mutates the seed
 # until one passes — the same date therefore yields the same proven
@@ -21,14 +21,14 @@ static func generate(seed_v: int, items: Array) -> SimLevel:
 	for x in range(1, SimC.GW - 1):
 		if x < pit_x or x >= pit_x + pit_w:
 			g[13][x] = "#"
-	# flag platform, top row 5..7
-	var flag_y := 5 + r.below(3)
+	# bowl platform, top row 5..7
+	var bowl_y := 5 + r.below(3)
 	for x in range(20, 25):
-		g[flag_y][x] = "#"
-	# ladder of rise-2 platforms from the ground toward the flag
+		g[bowl_y][x] = "#"
+	# ladder of rise-2 platforms from the ground toward the bowl
 	var x_cursor := 3 + r.below(3)
 	var y_level := 11
-	while y_level > flag_y:
+	while y_level > bowl_y:
 		var w := 3 + r.below(2)
 		if x_cursor + w > 18:
 			x_cursor = 18 - w
@@ -55,10 +55,10 @@ static func generate(seed_v: int, items: Array) -> SimLevel:
 	var lvl := SimLevel.build(items, rows)
 	lvl.spawn_px = (2 + r.below(2)) * SimC.FP + SimC.FP / 2
 	lvl.spawn_py = 13 * SimC.FP
-	lvl.flag_cx = 22 * SimC.FP + SimC.FP / 2
-	lvl.flag_top = flag_y * SimC.FP - 157286   # 2.4 t of pole above the platform
-	lvl.flag_bot = flag_y * SimC.FP
-	lvl.safe = [[1, 9, 5, 5], [19, flag_y - 5, 7, 6]]
+	lvl.bowl_cx = 22 * SimC.FP + SimC.FP / 2
+	lvl.bowl_top = bowl_y * SimC.FP - 157286   # 2.4 t of pole above the platform
+	lvl.bowl_bot = bowl_y * SimC.FP
+	lvl.safe = [[1, 9, 5, 5], [19, bowl_y - 5, 7, 6]]
 	return lvl
 
 static func daily(seed_v: int) -> Dictionary:

@@ -157,9 +157,9 @@ class Driver extends Node:
 		var saw := {}
 		if farmed.size() > 0:
 			var lvl := SimLevel.build([])
-			saw = L.saw_on_path(SimRace.resim(farmed, lvl), lvl)
+			saw = L.fan_on_path(SimRace.resim(farmed, lvl), lvl)
 			check("found a saw cell on the ghost path", not saw.is_empty())
 		if saw.is_empty():
 			saw = { "cx": 12, "cy": 6 }
-		main.pending = { "type": "saw", "cx": saw.cx, "cy": saw.cy, "rot": 0 }
+		main.pending = { "type": "fan", "cx": saw.cx, "cy": saw.cy, "rot": 0 }
 		main._commit_pending()

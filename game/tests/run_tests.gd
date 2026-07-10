@@ -83,14 +83,14 @@ func test_coyote_and_buffer() -> void:
 
 func test_placement_rules() -> void:
 	var lvl := SimLevel.build(L.test_items())
-	check("reject wall cell", not lvl.place_valid("saw", 0, 5, 0))
-	check("reject ground cell", not lvl.place_valid("saw", 4, 13, 0))
-	check("reject spawn safe zone", not lvl.place_valid("saw", 3, 11, 0))
-	check("reject flag safe zone", not lvl.place_valid("saw", 22, 4, 0))
-	check("reject item overlap", not lvl.place_valid("saw", 8, 12, 0))
-	check("accept open cell", lvl.place_valid("saw", 12, 6, 0))
-	check("plank cells span 3", SimLevel.item_cells("plank", 5, 5, 0).size() == 3)
-	check("spikes rotate to vertical", SimLevel.item_size("spikes", 1) == Vector2i(1, 2))
+	check("reject wall cell", not lvl.place_valid("fan", 0, 5, 0))
+	check("reject ground cell", not lvl.place_valid("fan", 4, 13, 0))
+	check("reject spawn safe zone", not lvl.place_valid("fan", 3, 11, 0))
+	check("reject flag safe zone", not lvl.place_valid("fan", 22, 4, 0))
+	check("reject item overlap", not lvl.place_valid("fan", 8, 12, 0))
+	check("accept open cell", lvl.place_valid("fan", 12, 6, 0))
+	check("plank cells span 3", SimLevel.item_cells("shelf", 5, 5, 0).size() == 3)
+	check("spikes rotate to vertical", SimLevel.item_size("cactus", 1) == Vector2i(1, 2))
 
 func test_determinism() -> void:
 	var log_b := L.rand_log(7, 1500)
@@ -143,8 +143,8 @@ func test_fates() -> void:
 	while t < st.len and not placed:
 		var cx := SimC.fdiv(int(st.xs[t]))
 		var cy := SimC.fdiv(int(st.ys[t]) - SimC.FP / 2)
-		if lvl1.place_valid("saw", cx, cy, 0):
-			all_items = [{ "type": "saw", "cx": cx, "cy": cy, "rot": 0, "round": 2 }]
+		if lvl1.place_valid("fan", cx, cy, 0):
+			all_items = [{ "type": "fan", "cx": cx, "cy": cy, "rot": 0, "round": 2 }]
 			placed = true
 		t += 5
 	check("found saw cell on ghost path", placed)
@@ -155,7 +155,7 @@ func test_fates() -> void:
 	var race_b := SimRace.create(all_items, roster)
 	check("fate is stable across recompute", race.fates[0].death == race_b.fates[0].death)
 	# same saw tagged round 1 must NOT kill the round-1 ghost
-	var old_items := [{ "type": "saw", "cx": all_items[0].cx, "cy": all_items[0].cy, "rot": 0, "round": 1 }]
+	var old_items := [{ "type": "fan", "cx": all_items[0].cx, "cy": all_items[0].cy, "rot": 0, "round": 1 }]
 	var race_c := SimRace.create(old_items, roster)
 	check("same-round saw spares the ghost", race_c.fates[0].death == -1, str(race_c.fates[0]))
 
@@ -169,7 +169,7 @@ func test_scoring() -> void:
 	var s3 := SimMatch.score_round(true, [f_dead, f_dead, f_alive])
 	check("finish + 2 dunks = 3", s3.d_you == 3 and s3.dunks == 2)
 	var s4 := SimMatch.score_round(false, [f_dead, f_alive])
-	check("death: survivor scores for horses", s4.d_foes == 1 and s4.key == "horses")
+	check("death: survivor scores for horses", s4.d_foes == 1 and s4.key == "copycats")
 	var s5 := SimMatch.score_round(false, [f_dead])
 	check("wash scores 0", s5.d_you == 0 and s5.d_foes == 0 and s5.key == "wash")
 
@@ -192,15 +192,15 @@ func test_gen() -> void:
 	check("daily level proven beatable", int(d.attempt) >= 0 and int(d.proof_len) > 0, str(d))
 	var lvl: SimLevel = d.lvl
 	check("spawn stands on ground", lvl.solid_at(SimC.fdiv(lvl.spawn_px), SimC.fdiv(lvl.spawn_py)))
-	check("flag sits on its platform", lvl.solid_at(SimC.fdiv(lvl.flag_cx), SimC.fdiv(lvl.flag_bot)))
+	check("flag sits on its platform", lvl.solid_at(SimC.fdiv(lvl.bowl_cx), SimC.fdiv(lvl.bowl_bot)))
 	var log_b := SimBot.farm_finishing(lvl, 100)
 	var st := SimRace.resim(log_b, lvl)
 	check("bot finishes the generated level", bool(st.finished))
 	var race := SimRace.create([], [{ "inputs": log_b, "round": 1, "len": int(st.len) }], lvl)
 	check("generated-level ghost stream matches resim", int(race.ghost_streams[0].len) == int(st.len))
-	var saw := L.saw_on_path(st, lvl)
+	var saw := L.fan_on_path(st, lvl)
 	if not saw.is_empty():
-		var race2 := SimRace.create([{ "type": "saw", "cx": saw.cx, "cy": saw.cy, "rot": 0, "round": 2 }],
+		var race2 := SimRace.create([{ "type": "fan", "cx": saw.cx, "cy": saw.cy, "rot": 0, "round": 2 }],
 			[{ "inputs": log_b, "round": 1, "len": int(st.len) }], lvl)
 		check("saw dunks ghost on generated level", int(race2.fates[0].death) >= 0)
 
