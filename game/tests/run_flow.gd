@@ -17,6 +17,7 @@ func _initialize() -> void:
 	root.add_child(d)
 
 class Driver extends Node:
+	const L := preload("res://tests/lib.gd")
 	var main: Node
 	var fails := 0
 	var stage := "boot"
@@ -141,54 +142,20 @@ class Driver extends Node:
 					_bail("recap 2 never advanced")
 
 	func _farm_and_inject() -> void:
-		var lvl := SimLevel.build([])
-		for seed_v in range(1, 301):
-			var log_b := _bot_log(seed_v)
-			var st := SimRace.resim(log_b, lvl)
-			if st.finished:
-				farmed = log_b.slice(0, int(st.len))
-				break
+		farmed = L.farm_finishing(300)
 		if farmed.size() > 0:
 			main.m.roster.append({ "inputs": farmed, "round": 1, "len": farmed.size() })
 			check("farmed a finishing run (level beatable by chaotic play)", true)
 		else:
 			check("farmed a finishing run (level beatable by chaotic play)", false, "300 seeds, none finished")
 
-	func _bot_log(seed_v: int) -> PackedByteArray:
-		var r := SimRNG.new(seed_v)
-		var out := PackedByteArray()
-		var hold := 0
-		var gap := 2 + r.below(10)
-		for t in range(900):
-			var b := 14                      # axis +7: always running right
-			if hold > 0:
-				b |= SimC.BIT_JUMP
-				hold -= 1
-			else:
-				gap -= 1
-				if gap <= 0:
-					hold = 6 + r.below(13)
-					gap = 3 + r.below(12)
-			out.append(b)
-		return out
-
 	func _place_saw_on_ghost_path() -> void:
-		if farmed.size() == 0:
-			main.pending = { "type": "saw", "cx": 12, "cy": 6, "rot": 0 }
-			main._commit_pending()
-			return
-		var lvl := SimLevel.build([])
-		var st := SimRace.resim(farmed, lvl)
-		var placed := false
-		var t: int = int(st.len) / 3
-		while t < int(st.len) and not placed:
-			var cx := SimC.fdiv(int(st.xs[t]))
-			var cy := SimC.fdiv(int(st.ys[t]) - SimC.FP / 2)
-			if main.place_level.place_valid("saw", cx, cy, 0):
-				main.pending = { "type": "saw", "cx": cx, "cy": cy, "rot": 0 }
-				placed = true
-			t += 5
-		check("found a saw cell on the ghost path", placed)
-		if not placed:
-			main.pending = { "type": "saw", "cx": 12, "cy": 6, "rot": 0 }
+		var saw := {}
+		if farmed.size() > 0:
+			var lvl := SimLevel.build([])
+			saw = L.saw_on_path(SimRace.resim(farmed, lvl), lvl)
+			check("found a saw cell on the ghost path", not saw.is_empty())
+		if saw.is_empty():
+			saw = { "cx": 12, "cy": 6 }
+		main.pending = { "type": "saw", "cx": saw.cx, "cy": saw.cy, "rot": 0 }
 		main._commit_pending()

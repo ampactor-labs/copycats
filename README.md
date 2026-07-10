@@ -44,5 +44,17 @@ finishes the level — which the test then kills with a saw placed on its
 recorded path. That last part doubles as a level-sanity property:
 chaotic right-running play can beat the starter layout.
 
+`tests/fuzz.gd` soaks N random matches (random valid placements, random
+inputs), requiring identical checksum trails across repeat runs and
+replay-perfect resimulation each time.
+
+CI runs the gate on linux and a determinism matrix on linux x64,
+linux arm64, macOS arm64, and Windows: each platform re-simulates the
+canonical scenarios (`tests/canonical/run_v1.chkr`, minted by
+`gen_canonical.gd --write`) and dumps a per-tick checksum trail via
+`dump_checksums.gd`; the trails must match byte for byte. Bumping
+`SIM_VERSION` re-mints the canonical or the matrix rejects its own
+demo — that's deliberate.
+
 Palette is gruvbox; meaning rides blue vs orange only and every hazard
 is shape-coded — safe for deuteranopia.

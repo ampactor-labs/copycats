@@ -1,0 +1,83 @@
+# Cross-platform determinism matrix: every platform re-simulates the same
+# canonical scenarios and dumps a per-tick checksum trail; the diff job
+# requires the files to be byte-for-byte identical. A divergence here is
+# the one failure the replay architecture cannot absorb.
+name: determinism
+on:
+  push:
+  pull_request:
+concurrency:
+  group: det-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  dump:
+    name: dump (${{ matrix.label }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: linux-x64
+            os: ubuntu-latest
+            asset: Godot_v4.7-stable_linux.x86_64.zip
+          - label: linux-arm64
+            os: ubuntu-24.04-arm
+            asset: Godot_v4.7-stable_linux.arm64.zip
+          - label: macos-arm64
+            os: macos-14
+            asset: Godot_v4.7-stable_macos.universal.zip
+          - label: windows-x64
+            os: windows-latest
+            asset: Godot_v4.7-stable_win64.exe.zip
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch Godot 4.7
+        shell: bash
+        run: |
+          curl -sSL -o godot.zip "https://github.com/godotengine/godot/releases/download/4.7-stable/${{ matrix.asset }}"
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            7z x -y godot.zip >/dev/null
+          else
+            unzip -q godot.zip
+          fi
+      - name: Dump checksum trail
+        shell: bash
+        run: |
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            EXE="./Godot.app/Contents/MacOS/Godot"
+            chmod +x "$EXE" || true
+          elif [[ "$RUNNER_OS" == "Windows" ]]; then
+            EXE=$(ls ./*win64_console.exe 2>/dev/null || ls ./*win64.exe)
+          else
+            EXE=$(ls ./Godot_v4.7-stable_linux.*)
+            chmod +x "$EXE"
+          fi
+          "$EXE" --headless --path game --import || true
+          "$EXE" --headless --path game -s res://tests/dump_checksums.gd -- --out "$PWD/checksums-${{ matrix.label }}.tsv"
+          test -s "checksums-${{ matrix.label }}.tsv"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: checksums-${{ matrix.label }}
+          path: checksums-*.tsv
+  diff:
+    needs: dump
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+      - name: Byte-for-byte compare
+        run: |
+          sha256sum *.tsv
+          ref=$(ls *.tsv | head -1)
+          rc=0
+          for f in *.tsv; do
+            if ! cmp -s "$ref" "$f"; then
+              echo "::error::determinism divergence: $f differs from $ref"
+              diff "$ref" "$f" | head -20 || true
+              rc=1
+            fi
+          done
+          exit $rc

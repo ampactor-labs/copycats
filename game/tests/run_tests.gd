@@ -3,6 +3,7 @@ extends SceneTree
 # Unit checks on feel, then the determinism gates: same inputs twice ->
 # identical checksums; resimulated replay == live run; golden replay.
 
+const L := preload("res://tests/lib.gd")
 var fails := 0
 const GOLDEN := 2004298441   # canonical replay checksum; a mismatch means the sim changed -> bump SIM_VERSION
 
@@ -15,41 +16,6 @@ func check(name: String, cond: bool, extra: String = "") -> void:
 		if extra != "":
 			msg += "  [" + extra + "]"
 		print(msg)
-
-static func mk(axis: int, jump: bool, down: bool = false) -> int:
-	var b := clampi(axis, -7, 7) + 7
-	if jump:
-		b |= SimC.BIT_JUMP
-	if down:
-		b |= SimC.BIT_DOWN
-	return b
-
-static func rand_log(seed_v: int, n: int) -> PackedByteArray:
-	var r := SimRNG.new(seed_v)
-	var out := PackedByteArray()
-	var jump := false
-	var axis := 7
-	for t in range(n):
-		if r.below(6) == 0:
-			axis = r.below(15)
-		if r.below(5) == 0:
-			jump = not jump
-		var down := r.below(40) == 0
-		var b := axis
-		if jump:
-			b |= SimC.BIT_JUMP
-		if down:
-			b |= SimC.BIT_DOWN
-		out.append(b)
-	return out
-
-static func test_items() -> Array:
-	return [
-		{ "type": "saw", "cx": 8, "cy": 12, "rot": 0, "round": 1 },
-		{ "type": "spikes", "cx": 16, "cy": 12, "rot": 0, "round": 1 },
-		{ "type": "spring", "cx": 6, "cy": 12, "rot": 0, "round": 1 },
-		{ "type": "bow", "cx": 2, "cy": 8, "rot": 0, "round": 1 },
-	]
 
 func _initialize() -> void:
 	test_jump_feel()
@@ -72,7 +38,7 @@ func test_jump_feel() -> void:
 	var race := SimRace.create([], [])
 	var min_py := race.p.py
 	for t in range(90):
-		race.step(mk(0, true))
+		race.step(L.mk(0, true))
 		min_py = mini(min_py, race.p.py)
 	var rise := SimLevel.SPAWN_PY - min_py
 	check("jump apex near 3.3 tiles", rise > 200000 and rise < 220000, "rise=%d" % rise)
@@ -81,7 +47,7 @@ func test_jump_feel() -> void:
 func test_run_speed() -> void:
 	var race := SimRace.create([], [])
 	for t in range(60):
-		race.step(mk(7, false))
+		race.step(L.mk(7, false))
 	check("run speed capped at RUN_V", race.p.vx == SimC.RUN_V, "vx=%d" % race.p.vx)
 	check("moved right", race.p.px > SimLevel.SPAWN_PX + 4 * SimC.FP, "px=%d" % race.p.px)
 
@@ -90,14 +56,14 @@ func test_coyote_and_buffer() -> void:
 	var race := SimRace.create([], [])
 	race.p.grounded = false
 	race.p.coyote = 3
-	race.step(mk(0, true))
+	race.step(L.mk(0, true))
 	check("coyote jump fires", race.p.vy < -19000, "vy=%d" % race.p.vy)
 	# negative control: no coyote, no wall -> no jump
 	var race2 := SimRace.create([], [])
 	race2.p.grounded = false
 	race2.p.coyote = 0
 	race2.p.wallc = 0
-	race2.step(mk(0, true))
+	race2.step(L.mk(0, true))
 	check("no coyote, no jump", race2.p.vy > -19000, "vy=%d" % race2.p.vy)
 	# buffer: press while falling just above ground; jump fires on landing
 	var race3 := SimRace.create([], [])
@@ -105,17 +71,17 @@ func test_coyote_and_buffer() -> void:
 	race3.p.coyote = 0
 	race3.p.py = SimLevel.SPAWN_PY - SimC.FP / 3
 	race3.p.vy = 8000
-	race3.step(mk(0, true))          # press now, still airborne
+	race3.step(L.mk(0, true))          # press now, still airborne
 	var jumped := false
 	for t in range(10):
-		race3.step(mk(0, true))
+		race3.step(L.mk(0, true))
 		if race3.p.vy < -15000:
 			jumped = true
 			break
 	check("buffered jump fires on landing", jumped, "vy=%d" % race3.p.vy)
 
 func test_placement_rules() -> void:
-	var lvl := SimLevel.build(test_items())
+	var lvl := SimLevel.build(L.test_items())
 	check("reject wall cell", not lvl.place_valid("saw", 0, 5, 0))
 	check("reject ground cell", not lvl.place_valid("saw", 4, 13, 0))
 	check("reject spawn safe zone", not lvl.place_valid("saw", 3, 11, 0))
@@ -126,14 +92,14 @@ func test_placement_rules() -> void:
 	check("spikes rotate to vertical", SimLevel.item_size("spikes", 1) == Vector2i(1, 2))
 
 func test_determinism() -> void:
-	var log_b := rand_log(7, 1500)
+	var log_b := L.rand_log(7, 1500)
 	var sums_a := _run_collect(log_b)
 	var sums_b := _run_collect(log_b)
 	check("identical checksum trail", sums_a == sums_b,
 		"a_end=%d b_end=%d" % [sums_a[sums_a.size() - 1], sums_b[sums_b.size() - 1]])
 
 func _run_collect(log_b: PackedByteArray) -> Array:
-	var race := SimRace.create(test_items(), [])
+	var race := SimRace.create(L.test_items(), [])
 	var sums: Array = []
 	for t in range(log_b.size()):
 		race.step(log_b[t])
@@ -143,8 +109,8 @@ func _run_collect(log_b: PackedByteArray) -> Array:
 	return sums
 
 func test_resim_matches_live() -> void:
-	var log_b := rand_log(99, 1200)
-	var race := SimRace.create(test_items(), [])
+	var log_b := L.rand_log(99, 1200)
+	var race := SimRace.create(L.test_items(), [])
 	var xs := PackedInt64Array()
 	var ys := PackedInt64Array()
 	for t in range(log_b.size()):
@@ -153,7 +119,7 @@ func test_resim_matches_live() -> void:
 		race.step(log_b[t])
 		xs.append(race.p.px)
 		ys.append(race.p.py)
-	var lvl := SimLevel.build(test_items())
+	var lvl := SimLevel.build(L.test_items())
 	var st := SimRace.resim(race.inputs, lvl)
 	var same: bool = int(st.len) == xs.size()
 	if same:
@@ -166,7 +132,7 @@ func test_resim_matches_live() -> void:
 
 func test_fates() -> void:
 	# any recorded stream works as a ghost; drop a saw on its path
-	var log_b := rand_log(31, 600)
+	var log_b := L.rand_log(31, 600)
 	var lvl1 := SimLevel.build([])
 	var st := SimRace.resim(log_b, lvl1)
 	var roster := [{ "inputs": log_b.slice(0, st.len), "round": 1, "len": st.len }]
@@ -207,7 +173,7 @@ func test_scoring() -> void:
 	check("wash scores 0", s5.d_you == 0 and s5.d_foes == 0 and s5.key == "wash")
 
 func test_replay_codec() -> void:
-	var inputs := rand_log(3, 321)
+	var inputs := L.rand_log(3, 321)
 	var b := SimReplay.encode(4, inputs)
 	var d := SimReplay.decode(b)
 	check("codec roundtrip", d.has("inputs") and d.inputs == inputs and d.round == 4)
@@ -216,8 +182,8 @@ func test_replay_codec() -> void:
 	check("garbage rejected", SimReplay.decode(PackedByteArray([1, 2, 3])).is_empty())
 
 func test_golden() -> void:
-	var log_b := rand_log(0xC41C, 900)
-	var race := SimRace.create(test_items(), [])
+	var log_b := L.rand_log(0xC41C, 900)
+	var race := SimRace.create(L.test_items(), [])
 	for t in range(log_b.size()):
 		race.step(log_b[t])
 	var sum := race.checksum()
