@@ -1,4 +1,4 @@
-# copycats — the ultimate form
+# copycats: the ultimate form
 
 One sentence: an async multiplayer party platformer where a group chat
 shares one increasingly boobytrapped house, every run is a
@@ -21,7 +21,7 @@ players to be present while you do it.
 
 Second, a deterministic sim turns a run into a file. That's the
 two-top thesis transplanted: record the input log, replay it anywhere,
-bit-identical. And this game needs the easy half only — no rollback,
+bit-identical. And this game needs the easy half only: no rollback,
 no prediction, no resync. Record and replay.
 
 Third, mobile multiplayer is asynchronous whether you design for it or
@@ -45,7 +45,7 @@ offer and knocks one piece into the house; the house locks when the
 last piece lands or the timer lapses. Gate two, the run: everyone
 races the same locked house solo; a recorded input log is the
 submission. If you miss the window, your best previous life replays as
-your entry — it will probably die to the new hazards, which is both
+your entry, and it will probably die to the new hazards, which is both
 the punishment and the comedy. Resolution then plays every run
 simultaneously as copycats, credits each death ("Dana's fan swats
 Alex"), applies scoring, and emits the share card.
@@ -65,7 +65,7 @@ matches.
 Products here die on the distribution wall, so the wall is a design
 input. Every loop emits an artifact into a chat: the invite is a link,
 the turn ping is a notification, and the resolution is a video that
-autoplays inline in iMessage or WhatsApp — the Wordle square, except
+autoplays inline in iMessage or WhatsApp, the Wordle square except
 it's your friend's cat dying to your box fan. Watching costs no click
 and no install. The link under the video opens the web build to play
 the house immediately; installing (add-to-home-screen PWA first,
@@ -77,58 +77,59 @@ first contact.
 Godot 4, one codebase, web-first; the same export pipeline covers
 Android/iOS later if stores ever earn their keep.
 
-- `sim/` — a pure deterministic module: integer math only, no engine
+- `sim/` is the pure deterministic module: integer math only, no engine
   physics, own RNG, fixed timestep, input-log in and state out, zero
   node dependencies, runs headless. If GDScript determinism proves
   leaky in practice, the fallback is the two-top `fixed_math` crate
   behind GDExtension; that risk is retired in M2, not discovered in
   M4.
-- `render/` — reads sim state, interpolates, carries all juice; never
+- `render/` reads sim state, interpolates, carries all juice, and never
   writes back.
-- replay — versioned format, strict sim_version match, no migrations
+- replay is a versioned format, strict sim_version match, no migrations
   (two-top rule). Any sim-affecting change bumps the version; the web
   player can keep old versions around cheaply.
-- server — one thin match service on Railway: Postgres rows for
+- server is one thin match service on Railway: Postgres rows for
   replays (they're kilobytes), REST plus pings for turns. Replays are
   the wire format. There are no game servers to run, and determinism
   means any client can re-simulate any submitted replay and refute a
   cheat.
-- share video — rendered on-device at resolution time; determinism
+- share video is rendered on-device at resolution time; determinism
   means any client renders identical frames, so the phone that closes
   the round mints the clip.
-- CI — the two-top harness pattern ported: cross-platform determinism
+- CI is the two-top harness pattern ported: cross-platform determinism
   matrix diffing per-tick checksums, plus a replay fuzz soak.
 
 ## Levels
 
-A house is greybox on purpose — primitives, no art — because the base
-level's job is not to look good, it's to be *fair and open*. This is
+A house is greybox on purpose, primitives and no art, because the base
+level's job is not to look good; it's to be *fair and open*. This is
 UCH: the round-1 no-trap run must be a gentle climb anyone clears, so
-that all the difficulty is the stuff the cats knock into it. Design for
-low base difficulty and lots of trap surface, not for a hard platformer.
+all the difficulty is the stuff the cats knock into it. Design for low
+base difficulty and lots of trap surface, not for a hard platformer.
 
-Every dimension is sized in movement units, derived once from the jump:
-a full jump peaks at 3.3 tiles, a rising-2 jump carries ~4.3 tiles
-across and a flat jump ~5.1, so required climbs stay at 2 tiles, gaps
-between platforms at 3, and any pit at 4. A gap the jump can't clear is
-not a difficulty choice, it's a bug.
+Every dimension is sized in movement units, derived once from the jump.
+A full jump peaks at 3.3 tiles; a rising-2 jump carries about 4.3 tiles
+across and a flat jump about 5.1. So required climbs stay at 2 tiles,
+gaps between platforms at 3, and any pit at 4. A gap the jump can't
+clear is not a difficulty choice; it's a bug.
 
 The generated dailies (`SimGen`) build to that grammar: a rightward,
 rising three-platform staircase from the spawn ground to the high
 dinner bowl, each hop inside the envelope so the critical path is
-reachable *by construction* — the last platform is one safe step below
-the bowl, not wherever the ladder happened to stop. A seeded chaos bot
-then has to actually reach the bowl before the house is allowed to
+reachable *by construction*. The last platform lands one safe step
+below the bowl, not wherever the ladder happened to stop. A seeded
+chaos bot still has to reach the bowl before the house is allowed to
 exist; that empirical proof is the backstop for anything the
-construction misses (a stray ledge in the jump arc). The classic house
-is the fixed teaching level and the fallback, and it stays put — its
-geometry is baked into the golden replay, so changing it would mean a
-SIM_VERSION bump and a re-mint, which a base-level tweak doesn't earn.
+construction misses, like a stray ledge in a jump arc. The classic
+house is the fixed teaching level and the fallback, and it stays put:
+its geometry is baked into the golden replay, so changing it would
+force a SIM_VERSION bump and a re-mint that a base-level tweak doesn't
+earn.
 
 ## Income
 
 Cosmetics only: cats, hats, trails, swat taunts, maybe a founder pack.
-Hazards and movement are never sold — pay-for-power kills a party
+Hazards and movement are never sold; pay-for-power kills a party
 game's trash-talk economy, which is the actual product. No crypto.
 The architecture keeps server cost near zero, so the business has to
 clear a low bar, not a miracle.
@@ -153,22 +154,22 @@ clear a low bar, not a miracle.
 
 Every milestone ships something playable.
 
-- M1 feel — Godot project, deterministic sim, touch controls, the
+- M1 feel: Godot project, deterministic sim, touch controls, the
   spike's solo-copycat loop rebuilt properly. Shipped.
-- M2 determinism — replay format, versioning, CI matrix, fuzz soak.
+- M2 determinism: replay format, versioning, CI matrix, fuzz soak.
   Shipped; the four-platform matrix is green.
-- M3 daily — seeded proven-beatable houses and the public web build at
+- M3 daily: seeded proven-beatable houses and the public web build at
   ampactor.dev/copycats. Shipped; stranger pools and the leaderboard
   move to M4 where they share the relay.
-- M3.5 couch — local hotseat versus for 2-8 cats on one screen, built
-  on SimVersus: an append-only log of placements and replay entries
+- M3.5 couch: local hotseat versus for 2-8 cats on one screen, built
+  on SimVersus, an append-only log of placements and replay entries
   that is already the relay wire format. Shipped; resume-from-log is
   the persistence and will be the network sync.
-- M4 matches — the Railway relay: room codes, invite links, async
+- M4 matches: the Railway relay with room codes, invite links, async
   rounds, stranger-ghost pools, leaderboard, resolution replays. A
   relay match is a hosted SimVersus log; couch and async are the same
   object at different paces.
-- M5 spectacle — share video, turn pings, cosmetics, PWA polish.
+- M5 spectacle: share video, turn pings, cosmetics, PWA polish.
 
 The HTML spike (`index.html`, and the published artifact) stays as the
 feel reference and the cheapest place to test loop variants before

@@ -5,7 +5,9 @@
 name: determinism
 on:
   push:
+    paths-ignore: ['**.md']
   pull_request:
+    paths-ignore: ['**.md']
 concurrency:
   group: det-${{ github.ref }}
   cancel-in-progress: true
