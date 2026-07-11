@@ -11,9 +11,14 @@ with what you placed while still making dinner yourself; if everyone
 lands on their feet, nobody scores. First to nine.
 
 Play it: **https://ampactor.dev/copycats/** — phone, landscape, no
-install. `DESIGN.md` holds the full form this builds toward: async
-multiplayer for a group chat, built on deterministic replays instead
-of netcode.
+install. SOLO races your own past lives; COUCH is 2-8 cats passing one
+screen around — everyone places, everyone runs the same locked house,
+then the whole round replays at once with swats credited by name. A
+couch match autosaves after every round and resumes from the title.
+Matches are device-local, so two rooms of the same house can run two
+matches at once by construction. `DESIGN.md` holds the full form this
+builds toward: async multiplayer for a group chat, built on
+deterministic replays instead of netcode.
 
 ## Layout
 

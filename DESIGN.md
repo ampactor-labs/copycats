@@ -134,8 +134,14 @@ Every milestone ships something playable.
 - M3 daily — seeded proven-beatable houses and the public web build at
   ampactor.dev/copycats. Shipped; stranger pools and the leaderboard
   move to M4 where they share the relay.
+- M3.5 couch — local hotseat versus for 2-8 cats on one screen, built
+  on SimVersus: an append-only log of placements and replay entries
+  that is already the relay wire format. Shipped; resume-from-log is
+  the persistence and will be the network sync.
 - M4 matches — the Railway relay: room codes, invite links, async
-  rounds, stranger-ghost pools, leaderboard, resolution replays.
+  rounds, stranger-ghost pools, leaderboard, resolution replays. A
+  relay match is a hosted SimVersus log; couch and async are the same
+  object at different paces.
 - M5 spectacle — share video, turn pings, cosmetics, PWA polish.
 
 The HTML spike (`index.html`, and the published artifact) stays as the

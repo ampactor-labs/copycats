@@ -28,10 +28,29 @@ const C_HAZ_DK := Color("d65d0e")
 const C_WOOD := Color("bdae93")
 const C_WOOD_DK := Color("a89984")
 
+# pelt roster for couch versus; names are the identity system, colors are flavor
+const PELTS := [
+	{ "name": "ORANGE", "body": Color("fabd2f"), "dark": Color("d79921") },
+	{ "name": "SOOT", "body": Color("928374"), "dark": Color("665c54") },
+	{ "name": "PEARL", "body": Color("ebdbb2"), "dark": Color("a89984") },
+	{ "name": "COCOA", "body": Color("a9744f"), "dark": Color("7c5136") },
+	{ "name": "TUXEDO", "body": Color("504945"), "dark": Color("32302f") },
+	{ "name": "BUTTER", "body": Color("d8a657"), "dark": Color("b47109") },
+	{ "name": "CREAM", "body": Color("d5c4a1"), "dark": Color("bdae93") },
+	{ "name": "GINGER", "body": Color("e78a4e"), "dark": Color("c35e0e") },
+]
+const COUCH_SAVE := "user://couch.save"
+
 var scene := "title"
 var m: SimMatch
 var race: SimRace
 var place_level: SimLevel
+var vs: SimVersus = null
+var vs_placer := -1
+var vs_runner := -1
+var vs_setup_n := 2
+var playback := {}
+var standings_res := {}
 var offer: Array = []
 var dragging := {}
 var pending := {}
@@ -103,6 +122,7 @@ func _save_cfg() -> void:
 # ---------- match flow ----------
 
 func _start_match(daily: bool = false) -> void:
+	vs = null
 	daily_mode = daily
 	if daily:
 		var t := _today()
@@ -146,10 +166,15 @@ func _begin_race() -> void:
 	scene = "countdown"
 
 func _commit_pending() -> void:
-	m.commit_item(pending.type, pending.cx, pending.cy, pending.rot)
 	var s := SimLevel.item_size(pending.type, int(pending.rot))
 	burst((pending.cx + s.x * 0.5) * TILE, (pending.cy + 0.5) * TILE, C_TEXT, 10, 3.0)
 	audio.play("place")
+	if in_vs():
+		vs.commit_item(vs_placer, pending.type, int(pending.cx), int(pending.cy), int(pending.rot))
+		pending = {}
+		_vs_after_place()
+		return
+	m.commit_item(pending.type, pending.cx, pending.cy, pending.rot)
 	pending = {}
 	_begin_race()
 
@@ -178,6 +203,138 @@ func _after_recap() -> void:
 		scene = "over"
 	else:
 		_next_round()
+
+# ---------- couch versus flow ----------
+
+func in_vs() -> bool:
+	return vs != null
+
+func _pelt_name(i: int) -> String:
+	return String(PELTS[i].name)
+
+func _start_couch(n: int) -> void:
+	vs = SimVersus.new(randi() & 0x7FFFFFFF, n)
+	_vs_begin_placement()
+
+func _resume_couch() -> void:
+	var f := FileAccess.open(COUCH_SAVE, FileAccess.READ)
+	if f == null:
+		return
+	var parsed = JSON.parse_string(f.get_as_text())
+	if not (parsed is Dictionary):
+		_clear_couch_save()
+		return
+	var loaded := SimVersus.deserialize(parsed)
+	if loaded == null:
+		_clear_couch_save()
+		return
+	vs = loaded
+	_vs_begin_placement()
+
+func _save_couch() -> void:
+	var f := FileAccess.open(COUCH_SAVE, FileAccess.WRITE)
+	if f != null:
+		f.store_string(JSON.stringify(vs.serialize()))
+		f.close()
+
+func _clear_couch_save() -> void:
+	if FileAccess.file_exists(COUCH_SAVE):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(COUCH_SAVE))
+
+func _vs_begin_placement() -> void:
+	vs.begin_round()
+	pending = {}
+	dragging = {}
+	vs_placer = vs.first_placer()
+	_vs_place_turn()
+
+func _vs_place_turn() -> void:
+	offer = vs.draw_offer()
+	place_level = SimLevel.derive(vs.base_level(), vs.items)
+	scene = "place"
+	_set_banner([[_pelt_name(vs_placer) + ": KNOCK SOMETHING OVER", C_TEXT]], 1.4, "")
+
+func _vs_after_place() -> void:
+	var placed: int = vs.match_log[vs.round_n - 1].placements.size()
+	if placed < vs.n_players:
+		vs_placer = (vs.first_placer() + placed) % vs.n_players
+		_vs_place_turn()
+	else:
+		vs_runner = vs.first_placer()
+		scene = "vs_hand"
+
+func _begin_race_vs() -> void:
+	race = vs.make_race()
+	cushion_hits = {}
+	ghost_trail = []
+	for i in range(race.ghost_streams.size()):
+		ghost_trail.append([])
+	cur_px = px_of(race.p.px)
+	cur_py = px_of(race.p.py)
+	prev_px = cur_px
+	prev_py = cur_py
+	sq = 0.0
+	run_ph = 0.0
+	cd_ticks = 120
+	scene = "countdown"
+	_set_banner([[_pelt_name(vs_runner) + ": GET TO DINNER", C_TEXT]], 1.6, "")
+
+func _vs_after_run() -> void:
+	vs.submit_entry(vs_runner, race.inputs.duplicate())
+	if not vs.entries_done():
+		var done: int = vs.match_log[vs.round_n - 1].entries.size()
+		vs_runner = (vs.first_placer() + done) % vs.n_players
+		scene = "vs_hand"
+	else:
+		standings_res = vs.resolve_round()
+		_save_couch()
+		if bool(standings_res.over):
+			_clear_couch_save()
+		_start_playback()
+
+func _start_playback() -> void:
+	var max_t := 0
+	for v in standings_res.entry_views:
+		max_t = maxi(max_t, int(v.stream.len))
+	for g in standings_res.ghost_views:
+		var d: int = int(g.death)
+		max_t = maxi(max_t, d if d >= 0 else int(g.stream.len))
+	playback = { "tick": 0, "speed": 1, "max_t": max_t, "ev_i": 0 }
+	scene = "vs_resolve"
+	_set_banner([["THE ROUND, ALL AT ONCE", C_TEXT]], 1.2, "tap to speed up")
+
+func _playback_step() -> void:
+	for s in range(int(playback.speed)):
+		playback.tick = int(playback.tick) + 1
+		var evs: Array = standings_res.events
+		while int(playback.ev_i) < evs.size() and int(evs[playback.ev_i].tick) <= int(playback.tick):
+			_playback_event(evs[playback.ev_i])
+			playback.ev_i = int(playback.ev_i) + 1
+	if int(playback.tick) > int(playback.max_t) + 50:
+		scene = "vs_stand"
+
+func _playback_event(ev: Dictionary) -> void:
+	var kind := String(ev.kind)
+	var ex := px_of(int(ev.x))
+	var ey := px_of(int(ev.y)) - 26.0
+	if kind == "finish":
+		audio.play("finish")
+		burst(ex, ey, C_GOAL, 16, 6.0)
+		pop(ex, ey, _pelt_name(int(ev.who)) + ": DINNER", C_YOU)
+	elif kind == "swat":
+		audio.play("swat")
+		shake = maxf(shake, 5.0)
+		burst(ex, ey, PELTS[int(ev.who)].body, 18, 7.0)
+		pop(ex, ey, "%s SWATS %s" % [_pelt_name(int(ev.by)), _pelt_name(int(ev.who))], C_HAZ)
+	elif kind == "gswat":
+		audio.play("swat")
+		shake = maxf(shake, 4.0)
+		burst(ex, ey, C_GHOST, 14, 6.0)
+		pop(ex, ey, "%s SWATS %s'S ECHO" % [_pelt_name(int(ev.by)), _pelt_name(int(ev.who))], C_HAZ)
+	elif kind == "die":
+		audio.play("die")
+		burst(ex, ey, PELTS[int(ev.who)].body, 14, 6.0)
+		pop(ex, ey, _pelt_name(int(ev.who)) + " ATE IT", C_DIM)
 
 # ---------- ticking ----------
 
@@ -208,10 +365,15 @@ func _physics_process(_dt: float) -> void:
 			_drain_events()
 			_push_trails()
 			if race.resolved():
-				_end_round()
+				if in_vs():
+					_vs_after_run()
+				else:
+					_end_round()
 				break
 		if down_pulse > 0:
 			down_pulse -= 1
+	elif scene == "vs_resolve":
+		_playback_step()
 
 func _input_byte() -> int:
 	var axis := 0
@@ -363,10 +525,29 @@ func _touch_down(i: int, pos: Vector2) -> void:
 					audio.play("ui")
 			elif _title_play_rect().has_point(pos):
 				audio.play("ui")
+				vs = null
 				_start_match(false)
+			elif _title_couch_rect().has_point(pos):
+				audio.play("ui")
+				scene = "couch"
 			elif _title_daily_rect().has_point(pos):
 				audio.play("ui")
+				vs = null
 				_start_match(true)
+		"couch":
+			_couch_down(pos)
+		"vs_hand":
+			audio.play("ui")
+			_begin_race_vs()
+		"vs_resolve":
+			playback.speed = 3 if int(playback.speed) == 1 else 1
+		"vs_stand":
+			audio.play("ui")
+			if bool(standings_res.over):
+				vs = null
+				scene = "title"
+			else:
+				_vs_begin_placement()
 		"over":
 			audio.play("ui")
 			_start_match(daily_mode)
@@ -380,6 +561,27 @@ func _touch_down(i: int, pos: Vector2) -> void:
 				stick = { "index": i, "anchor": pos.x, "y": pos.y }
 			else:
 				jump_touch[i] = true
+
+func _couch_down(pos: Vector2) -> void:
+	if Rect2(20, 16, 90, 40).has_point(pos):
+		audio.play("ui")
+		scene = "title"
+		return
+	if Rect2(W / 2.0 - 150.0, H * 0.40, 60, 60).has_point(pos):
+		vs_setup_n = maxi(2, vs_setup_n - 1)
+		audio.play("ui")
+		return
+	if Rect2(W / 2.0 + 90.0, H * 0.40, 60, 60).has_point(pos):
+		vs_setup_n = mini(SimVersus.MAX_PLAYERS, vs_setup_n + 1)
+		audio.play("ui")
+		return
+	if Rect2(W / 2.0 - 130.0, H * 0.66, 260, 56).has_point(pos):
+		audio.play("ui")
+		_start_couch(vs_setup_n)
+		return
+	if FileAccess.file_exists(COUCH_SAVE) and Rect2(W / 2.0 - 130.0, H * 0.80, 260, 44).has_point(pos):
+		audio.play("ui")
+		_resume_couch()
 
 func _touch_move(i: int, pos: Vector2) -> void:
 	if touches.has(i):
@@ -535,21 +737,29 @@ func _draw() -> void:
 	if scene == "title":
 		_draw_title()
 		return
+	if scene == "couch":
+		_draw_couch()
+		return
 	var lvl := _current_level()
 	if lvl == null:
 		return
 	_draw_level(lvl)
 	_draw_world_items(lvl)
 	_draw_bowl(lvl)
-	if race != null and scene != "place":
-		for a in SimRace.balls_at(race.tracks, maxi(race.tick - 1, 0)):
+	if scene == "vs_resolve":
+		for a in SimRace.balls_at(race.tracks, int(playback.tick)):
 			_draw_ball(px_of(a.xc), px_of(a.yc), int(a.dir))
-	_draw_ghosts()
-	if race != null and scene != "place" and not race.p.dead:
-		var alpha := Engine.get_physics_interpolation_fraction()
-		var dx := lerpf(prev_px, cur_px, alpha)
-		var dy := lerpf(prev_py, cur_py, alpha)
-		_draw_cat(dx, dy, race.p.face, 1.0, 1.0, true)
+		_draw_playback_cats()
+	else:
+		if race != null and scene != "place":
+			for a in SimRace.balls_at(race.tracks, maxi(race.tick - 1, 0)):
+				_draw_ball(px_of(a.xc), px_of(a.yc), int(a.dir))
+		_draw_ghosts()
+		if race != null and scene != "place" and scene != "vs_hand" and scene != "vs_stand" and not race.p.dead:
+			var alpha := Engine.get_physics_interpolation_fraction()
+			var dx := lerpf(prev_px, cur_px, alpha)
+			var dy := lerpf(prev_py, cur_py, alpha)
+			_draw_cat(dx, dy, race.p.face, 1.0, 1.0, true, vs_runner if in_vs() else 0)
 	for p in fxp:
 		draw_rect(Rect2(Vector2(p.x - p.sz / 2.0, p.y - p.sz / 2.0) + shk_v, Vector2(p.sz, p.sz)), ca(p.col, 1.0 - p.t / p.life))
 	for p in pops:
@@ -565,6 +775,10 @@ func _draw() -> void:
 		_draw_recap()
 	elif scene == "over":
 		_draw_over()
+	elif scene == "vs_hand":
+		_draw_handoff()
+	elif scene == "vs_stand":
+		_draw_standings()
 	_draw_banner()
 	if debug_on:
 		_draw_debug()
@@ -574,7 +788,85 @@ func _current_level() -> SimLevel:
 		return place_level
 	if race != null:
 		return race.level
+	if scene == "vs_hand" and place_level != null:
+		return place_level
 	return null
+
+func _draw_playback_cats() -> void:
+	var t := int(playback.tick)
+	for g in standings_res.ghost_views:
+		var st: Dictionary = g.stream
+		var d := int(g.death)
+		if d >= 0 and t > d:
+			continue
+		var idx := mini(t, int(st.len) - 1)
+		_draw_copycat(px_of(st.xs[idx]), px_of(st.ys[idx]), int(st.faces[idx]), 0.4)
+	for v in standings_res.entry_views:
+		var st: Dictionary = v.stream
+		var last := int(st.len) - 1
+		if t > last:
+			continue
+		var idx := mini(t, last)
+		var pi := int(v.player)
+		_draw_cat(px_of(st.xs[idx]), px_of(st.ys[idx]), int(st.faces[idx]), 1.0, 1.0, false, pi)
+		txt_c(px_of(st.xs[idx]), px_of(st.ys[idx]) - 46.0, _pelt_name(pi), 10, PELTS[pi].body)
+
+func _draw_couch() -> void:
+	var cx := W / 2.0
+	txt_l(24.0, 42.0, "< back", 14, C_DIM)
+	txt_c(cx, H * 0.16, "COUCH", 40, C_TEXT)
+	txt_c(cx, H * 0.16 + 26.0, "pass one screen around. every cat runs the same house.", 13, C_DIM)
+	draw_rect(Rect2(cx - 150.0, H * 0.40, 60, 60), C_TILE)
+	txt_c(cx - 120.0, H * 0.40 + 38.0, "-", 30, C_TEXT)
+	draw_rect(Rect2(cx + 90.0, H * 0.40, 60, 60), C_TILE)
+	txt_c(cx + 120.0, H * 0.40 + 38.0, "+", 30, C_TEXT)
+	txt_c(cx, H * 0.40 + 42.0, "%d CATS" % vs_setup_n, 32, C_YOU)
+	for i in range(vs_setup_n):
+		var px0 := cx - (vs_setup_n - 1) * 24.0 + i * 48.0
+		_draw_cat(px0, H * 0.60, 1, 1.0, 0.7, false, i)
+	var sr := Rect2(cx - 130.0, H * 0.66, 260, 56)
+	draw_rect(sr, C_TILE)
+	draw_rect(sr, C_YOU, false, 2.0)
+	txt_c(cx, H * 0.66 + 35.0, "START", 20, C_YOU)
+	if FileAccess.file_exists(COUCH_SAVE):
+		var rr := Rect2(cx - 130.0, H * 0.80, 260, 44)
+		draw_rect(rr, C_TILE)
+		draw_rect(rr, C_GHOST, false, 2.0)
+		txt_c(cx, H * 0.80 + 28.0, "RESUME MATCH", 15, C_GHOST)
+
+func _draw_handoff() -> void:
+	draw_rect(Rect2(0, 0, W, H), Color(C_VOID.r, C_VOID.g, C_VOID.b, 0.72))
+	var cx := W / 2.0
+	txt_c(cx, H * 0.34, "PASS TO", 18, C_DIM)
+	_draw_cat(cx, H * 0.56, 1, 1.0, 2.2, false, vs_runner)
+	txt_c(cx, H * 0.66, _pelt_name(vs_runner), 34, PELTS[vs_runner].body)
+	txt_c(cx, H * 0.78 + sin(elapsed * 4.0) * 3.0, "tap when you have the screen", 14, C_GOAL)
+
+func _draw_standings() -> void:
+	draw_rect(Rect2(0, 0, W, H), Color(C_VOID.r, C_VOID.g, C_VOID.b, 0.72))
+	var cx := W / 2.0
+	var over := bool(standings_res.over)
+	if over:
+		txt_c(cx, H * 0.16, _pelt_name(int(standings_res.winner)) + " IS TOP CAT", 34, PELTS[int(standings_res.winner)].body)
+	else:
+		txt_c(cx, H * 0.16, "STANDINGS", 26, C_TEXT)
+	var order: Array = []
+	for i in range(vs.n_players):
+		order.append(i)
+	order.sort_custom(func(a, b): return vs.scores[a] > vs.scores[b])
+	for rank in range(order.size()):
+		var pi: int = order[rank]
+		var y := H * 0.26 + rank * 36.0
+		_draw_cat(cx - 130.0, y + 12.0, 1, 1.0, 0.55, false, pi)
+		txt_l(cx - 100.0, y + 6.0, _pelt_name(pi), 16, PELTS[pi].body)
+		var delta := int(standings_res.deltas[pi])
+		var line := "%d" % vs.scores[pi]
+		if delta > 0:
+			line += "   (+%d)" % delta
+		txt_l(cx + 40.0, y + 6.0, line, 16, C_TEXT)
+	if bool(standings_res.all_made_it):
+		txt_c(cx, H * 0.26 + order.size() * 36.0 + 10.0, "everyone landed on their feet - no dinner points", 12, C_DIM)
+	txt_c(cx, H * 0.90 + sin(elapsed * 4.0) * 3.0, "TAP: BACK TO TITLE" if over else "TAP: NEXT ROUND", 15, C_GOAL)
 
 func _draw_level(lvl: SimLevel) -> void:
 	for y in range(SimC.GH):
@@ -696,7 +988,7 @@ func _draw_bowl(lvl: SimLevel) -> void:
 			draw_line(prev, cur, ca(C_GOAL, 0.55 - i * 0.07), 2.0)
 			prev = cur
 
-func _draw_cat(x: float, y: float, face: int, alpha: float, sc: float, animate: bool) -> void:
+func _draw_cat(x: float, y: float, face: int, alpha: float, sc: float, animate: bool, pelt: int = 0) -> void:
 	var sqv := sq if animate else 0.0
 	var bob := 0.0
 	var ph := 0.0
@@ -706,19 +998,21 @@ func _draw_cat(x: float, y: float, face: int, alpha: float, sc: float, animate: 
 		if race.p.grounded and absi(race.p.vx) > 600:
 			bob = sin(run_ph * 6.0) * 1.5
 			ph = sin(run_ph * 6.0)
+	var body_c: Color = PELTS[pelt].body
+	var dark_c: Color = PELTS[pelt].dark
 	draw_set_transform(Vector2(x, y + bob) + shk_v, 0.0, Vector2(face * sc * (1.0 + sqv * 0.8), sc * (1.0 - sqv)))
-	var leg := ca(C_YOU_DK, alpha)
+	var leg := ca(dark_c, alpha)
 	draw_line(Vector2(-7, -8), Vector2(-7 + (-2.0 if air else ph * 4.0), 0), leg, 3.0)
 	draw_line(Vector2(5, -8), Vector2(5 + (2.0 if air else -ph * 4.0), 0), leg, 3.0)
-	var tail := ca(C_YOU, alpha)
+	var tail := ca(body_c, alpha)
 	draw_line(Vector2(-11, -18), Vector2(-17, -25), tail, 3.0)
 	draw_line(Vector2(-17, -25), Vector2(-14, -31), tail, 3.0)
-	draw_rect(Rect2(-12, -22, 24, 14), ca(C_YOU, alpha))
-	draw_rect(Rect2(-6, -22, 3, 14), ca(C_YOU_DK, alpha))
-	draw_rect(Rect2(1, -22, 3, 14), ca(C_YOU_DK, alpha))
-	draw_rect(Rect2(4, -34, 14, 13), ca(C_YOU, alpha))
-	draw_colored_polygon(PackedVector2Array([Vector2(5, -34), Vector2(7, -40), Vector2(10, -34)]), ca(C_YOU, alpha))
-	draw_colored_polygon(PackedVector2Array([Vector2(12, -34), Vector2(15, -40), Vector2(17, -34)]), ca(C_YOU, alpha))
+	draw_rect(Rect2(-12, -22, 24, 14), ca(body_c, alpha))
+	draw_rect(Rect2(-6, -22, 3, 14), ca(dark_c, alpha))
+	draw_rect(Rect2(1, -22, 3, 14), ca(dark_c, alpha))
+	draw_rect(Rect2(4, -34, 14, 13), ca(body_c, alpha))
+	draw_colored_polygon(PackedVector2Array([Vector2(5, -34), Vector2(7, -40), Vector2(10, -34)]), ca(body_c, alpha))
+	draw_colored_polygon(PackedVector2Array([Vector2(12, -34), Vector2(15, -40), Vector2(17, -34)]), ca(body_c, alpha))
 	draw_rect(Rect2(12, -30, 3, 3), ca(C_BG, alpha))
 	draw_colored_polygon(PackedVector2Array([Vector2(18, -26), Vector2(20, -25), Vector2(18, -24)]), ca(C_HAZ_DK, alpha))
 	var wisk := ca(C_TEXT, alpha * 0.65)
@@ -744,7 +1038,8 @@ func _draw_copycat(x: float, y: float, face: int, alpha: float, sc: float = 1.0)
 
 func _draw_ghosts() -> void:
 	if scene == "place":
-		for i in range(m.roster.size()):
+		var n_pool: int = vs.pool_roster().size() if in_vs() else m.roster.size()
+		for i in range(n_pool):
 			_draw_copycat(px_of(place_level.spawn_px) + (i - 1) * 16.0, px_of(place_level.spawn_py), 1, 0.45)
 		return
 	if race == null:
@@ -774,6 +1069,20 @@ func _draw_ghosts() -> void:
 # ---------- hud + screens ----------
 
 func _draw_hud() -> void:
+	if in_vs():
+		var total_w := vs.n_players * 74.0
+		var x0 := W / 2.0 - total_w / 2.0
+		for i in range(vs.n_players):
+			var ccx := x0 + i * 74.0 + 22.0
+			var hilite: bool = (scene == "race" or scene == "countdown") and i == vs_runner
+			_draw_cat(ccx, 46.0, 1, 1.0 if hilite else 0.75, 0.5, false, i)
+			txt_l(ccx + 14.0, 38.0, "%d" % vs.scores[i], 16, PELTS[i].body)
+		txt_c(W / 2.0, 14.0, "COUCH  -  ROUND %d  -  FIRST TO %d" % [vs.round_n, SimVersus.TARGET], 12, C_DIM)
+		if scene == "race":
+			var left_vs := maxi(0, (SimC.ROUND_TICKS - race.tick + 59) / 60)
+			txt_c(W - 40.0, 38.0, "%ds" % left_vs, 15, C_HAZ if left_vs <= 10 else C_TEXT)
+		_draw_race_aids(vs.round_n)
+		return
 	_draw_cat(26.0, 42.0, 1, 1.0, 0.62, false)
 	txt_l(44.0, 32.0, "%02d" % m.you, 19, C_YOU)
 	_draw_copycat(W - 28.0, 42.0, -1, 0.8, 1.0)
@@ -783,6 +1092,7 @@ func _draw_hud() -> void:
 	if scene == "race":
 		var left := maxi(0, (SimC.ROUND_TICKS - race.tick + 59) / 60)
 		txt_c(W / 2.0, 42.0, "%ds" % left, 17, C_HAZ if left <= 10 else C_TEXT)
+	_draw_race_aids(m.round_n)
 	if (scene == "race" or scene == "recap") and race != null and race.fates.size() > 0:
 		for i in range(race.fates.size()):
 			var f: Dictionary = race.fates[i]
@@ -798,7 +1108,8 @@ func _draw_hud() -> void:
 					draw_line(Vector2(x - 1, y + 4), Vector2(x + 5, y - 4), C_GOAL, 3.0)
 			else:
 				draw_rect(Rect2(x - 4.0, y - 4.0, 8.0, 8.0), C_GHOST)
-	if scene == "race" and m.round_n == 1 and race.tick < 240:
+func _draw_race_aids(round_now: int) -> void:
+	if scene == "race" and round_now == 1 and race.tick < 240:
 		var a := 0.6 * (1.0 - race.tick / 240.0)
 		draw_dashed_line(Vector2(W * 0.42, H * 0.55), Vector2(W * 0.42, H - 12.0), ca(C_DIM, a), 1.5, 7.0)
 		txt_c(W * 0.21, H - 30.0, "< slide to move >", 13, ca(C_DIM, a))
@@ -956,7 +1267,15 @@ func _draw_title() -> void:
 	var pr := _title_play_rect()
 	draw_rect(pr, C_TILE)
 	draw_rect(pr, C_YOU, false, 2.0)
-	txt_c(pr.get_center().x, pr.get_center().y + 6.0, "PLAY", 20, C_YOU)
+	txt_c(pr.get_center().x, pr.get_center().y + 6.0, "SOLO", 20, C_YOU)
+	var cr := _title_couch_rect()
+	draw_rect(cr, C_TILE)
+	draw_rect(cr, C_TEXT, false, 2.0)
+	txt_c(cr.get_center().x, cr.position.y + 26.0, "COUCH", 20, C_TEXT)
+	var couch_sub := "2-8 cats, one screen"
+	if FileAccess.file_exists(COUCH_SAVE):
+		couch_sub = "match in progress"
+	txt_c(cr.get_center().x, cr.position.y + 48.0, couch_sub, 11, C_DIM)
 	var dr := _title_daily_rect()
 	draw_rect(dr, C_TILE)
 	draw_rect(dr, C_GHOST, false, 2.0)
@@ -972,10 +1291,13 @@ func _draw_title() -> void:
 		txt_c(cx, H * 0.88 + 20.0, "best win: %d rounds" % best_rounds, 11, C_FAINT)
 
 func _title_play_rect() -> Rect2:
-	return Rect2(W / 2.0 - 210.0, H * 0.52, 190.0, 60.0)
+	return Rect2(W / 2.0 - 290.0, H * 0.52, 180.0, 60.0)
+
+func _title_couch_rect() -> Rect2:
+	return Rect2(W / 2.0 - 90.0, H * 0.52, 180.0, 60.0)
 
 func _title_daily_rect() -> Rect2:
-	return Rect2(W / 2.0 + 20.0, H * 0.52, 190.0, 60.0)
+	return Rect2(W / 2.0 + 110.0, H * 0.52, 180.0, 60.0)
 
 func _draw_banner() -> void:
 	if banner.is_empty():

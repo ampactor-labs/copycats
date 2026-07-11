@@ -29,16 +29,19 @@ func begin_round() -> Dictionary:
 	return { "place": true, "offer": draw_offer() }
 
 func draw_offer() -> Array:
+	return draw_offer_from(rng)
+
+static func draw_offer_from(r: SimRNG) -> Array:
 	var pool := POOL.duplicate()
 	var out: Array = []
 	while out.size() < 3:
-		out.append(pool.pop_at(rng.below(pool.size())))
+		out.append(pool.pop_at(r.below(pool.size())))
 	var has_hazard := false
 	for t in out:
 		if SimLevel.DEFS[t].hazard:
 			has_hazard = true
 	if not has_hazard:
-		out[rng.below(3)] = HAZARDS[rng.below(3)]
+		out[r.below(3)] = HAZARDS[r.below(3)]
 	return out
 
 func commit_item(type: String, cx: int, cy: int, rot: int) -> void:

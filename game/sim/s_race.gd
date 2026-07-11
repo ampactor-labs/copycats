@@ -28,17 +28,14 @@ static func create(all_items: Array, roster: Array, template: SimLevel = null) -
 		var lvl_g := SimLevel.derive(base, SimLevel.items_upto(all_items, g.round))
 		var st := resim(g.inputs, lvl_g)
 		r.ghost_streams.append(st)
-		var newer: Array = []
-		for it in all_items:
-			if it.round > g.round and SimLevel.DEFS[it.type].hazard:
-				newer.append(it)
-		var death := compute_fate(st, newer, r.tracks, g.round)
+		var death := compute_fate(st, all_items, r.tracks, g.round)
 		r.fates.append({ "death": death, "done": death if death >= 0 else st.len })
 	return r
 
 static func schedule_balls(lvl: SimLevel) -> Array:
 	var out: Array = []
-	for it in lvl.items:
+	for item_i in range(lvl.items.size()):
+		var it: Dictionary = lvl.items[item_i]
 		if it.type != "launcher":
 			continue
 		var dir := 1 if it.rot == 0 else -1
@@ -53,7 +50,7 @@ static func schedule_balls(lvl: SimLevel) -> Array:
 		while t0 < SimC.ROUND_TICKS:
 			out.append({ "t0": t0, "life": life,
 				"x0": it.cx * SimC.FP + SimC.FP / 2, "y": it.cy * SimC.FP + SimC.FP / 2,
-				"dir": dir, "round": it.round })
+				"dir": dir, "round": it.round, "item": item_i })
 			t0 += SimC.BALL_EVERY
 	return out
 
@@ -66,7 +63,7 @@ static func balls_at(tracks_in: Array, t: int) -> Array:
 		var x: int = tr.x0 + tr.dir * SimC.BALL_V * dt
 		out.append({ "x0": x - SimC.BALL_HW, "x1": x + SimC.BALL_HW,
 			"y0": tr.y - SimC.BALL_HH, "y1": tr.y + SimC.BALL_HH,
-			"xc": x, "yc": tr.y, "dir": tr.dir, "round": tr.round })
+			"xc": x, "yc": tr.y, "dir": tr.dir, "round": tr.round, "item": tr.get("item", -1) })
 	return out
 
 static func resim(log_bytes: PackedByteArray, lvl: SimLevel) -> Dictionary:
@@ -86,10 +83,16 @@ static func resim(log_bytes: PackedByteArray, lvl: SimLevel) -> Dictionary:
 			break
 	return { "xs": xs, "ys": ys, "faces": faces, "len": xs.size(), "finished": pl.finished }
 
-static func compute_fate(st: Dictionary, newer_items: Array, all_tracks: Array, g_round: int) -> int:
+static func compute_fate(st: Dictionary, all_items: Array, all_tracks: Array, g_round: int) -> int:
+	return int(find_killer(st, all_items, all_tracks, g_round).tick)
+
+static func find_killer(st: Dictionary, all_items: Array, all_tracks: Array, min_round: int) -> Dictionary:
+	# earliest tick a hazard newer than min_round overlaps the stream,
+	# plus WHICH item did it (for swat credit); {tick: -1, item: -1} if none.
+	# min_round = -1 checks every item (a live run's own death).
 	var newer_tracks: Array = []
 	for tr in all_tracks:
-		if tr.round > g_round:
+		if tr.round > min_round:
 			newer_tracks.append(tr)
 	for t in range(st.len):
 		var x: int = st.xs[t]
@@ -98,22 +101,25 @@ static func compute_fate(st: Dictionary, newer_items: Array, all_tracks: Array, 
 		var bx1 := x + SimC.HW
 		var by0 := y - SimC.PH
 		var by1 := y
-		for it in newer_items:
+		for i in range(all_items.size()):
+			var it: Dictionary = all_items[i]
+			if it.round <= min_round:
+				continue
 			if it.type == "cactus":
 				var b: Dictionary = SimLevel.cactus_box(it)
 				if bx0 < b.x1 and bx1 > b.x0 and by0 < b.y1 and by1 > b.y0:
-					return t
+					return { "tick": t, "item": i }
 			elif it.type == "fan":
 				var cx: int = it.cx * SimC.FP + SimC.FP / 2
 				var cy: int = it.cy * SimC.FP + SimC.FP / 2
 				var qx := clampi(cx, bx0, bx1)
 				var qy := clampi(cy, by0, by1)
 				if (cx - qx) * (cx - qx) + (cy - qy) * (cy - qy) < SimC.FAN_R2:
-					return t
+					return { "tick": t, "item": i }
 		for a in balls_at(newer_tracks, t):
 			if bx0 < a.x1 and bx1 > a.x0 and by0 < a.y1 and by1 > a.y0:
-				return t
-	return -1
+				return { "tick": t, "item": int(a.item) }
+	return { "tick": -1, "item": -1 }
 
 func step(b: int) -> void:
 	var alive := not (p.dead or p.finished)

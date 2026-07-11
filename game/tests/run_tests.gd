@@ -28,6 +28,7 @@ func _initialize() -> void:
 	test_scoring()
 	test_replay_codec()
 	test_gen()
+	test_versus()
 	test_golden()
 	if fails == 0:
 		print("\nALL OK")
@@ -203,6 +204,57 @@ func test_gen() -> void:
 		var race2 := SimRace.create([{ "type": "fan", "cx": saw.cx, "cy": saw.cy, "rot": 0, "round": 2 }],
 			[{ "inputs": log_b, "round": 1, "len": int(st.len) }], lvl)
 		check("saw dunks ghost on generated level", int(race2.fates[0].death) >= 0)
+
+func test_versus() -> void:
+	# three cats: one farmed finisher, two chaotic runners
+	var fin := L.farm_finishing(300)
+	check("versus: farmed a finisher", fin.size() > 0)
+	if fin.is_empty():
+		return
+	# rivals hold right and never jump: guaranteed pit deaths. placements
+	# sit where no route can reach, so the finisher's replay stays intact.
+	var die_log := PackedByteArray()
+	for t in range(200):
+		die_log.append(14)
+	var vs := SimVersus.new(777, 3)
+	vs.begin_round()
+	vs.commit_item(0, "shelf", 12, 2, 0)
+	vs.commit_item(1, "cushion", 3, 7, 0)
+	vs.commit_item(2, "shelf", 5, 2, 0)
+	vs.submit_entry(0, fin)
+	vs.submit_entry(1, die_log)
+	vs.submit_entry(2, die_log)
+	check("versus: entries gate", vs.entries_done())
+	var res := vs.resolve_round()
+	check("versus: lone finisher scores finish + first", vs.scores == [2, 0, 0], str(vs.scores))
+	check("versus: not over yet", not bool(res.over))
+	check("versus: pools grew", vs.pools[0].size() == 1 and vs.pools[1].size() == 1)
+	# round 2: player 1 drops a fan on player 0's pool ghost path
+	var lvl := SimLevel.build([])
+	var st := SimRace.resim(fin, lvl)
+	var fan := L.fan_on_path(st, SimLevel.build(vs.items))
+	check("versus: fan cell found on ghost path", not fan.is_empty())
+	if fan.is_empty():
+		return
+	vs.begin_round()
+	vs.commit_item(1, "fan", int(fan.cx), int(fan.cy), 0)
+	vs.submit_entry(0, fin)         # same line dies to the new fan now
+	vs.submit_entry(1, die_log)
+	vs.submit_entry(2, die_log)
+	var s1_before: int = vs.scores[1]
+	var res2 := vs.resolve_round()
+	var ghost_swats := 0
+	for ev in res2.events:
+		if ev.kind == "gswat" and int(ev.by) == 1:
+			ghost_swats += 1
+	check("versus: fan owner credited for ghost swat", ghost_swats >= 1 and vs.scores[1] > s1_before,
+		"events=%s scores=%s" % [str(res2.events), str(vs.scores)])
+	# serialize -> deserialize -> identical derived state
+	var d := vs.serialize()
+	var vs2 := SimVersus.deserialize(d)
+	check("versus: resume rebuilds identical scores", vs2 != null and vs2.scores == vs.scores,
+		str(vs2.scores if vs2 != null else "null"))
+	check("versus: resume rebuilds pools", vs2.pools[0].size() == vs.pools[0].size())
 
 func test_golden() -> void:
 	var log_b := L.rand_log(0xC41C, 900)
