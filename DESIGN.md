@@ -99,6 +99,32 @@ Android/iOS later if stores ever earn their keep.
 - CI — the two-top harness pattern ported: cross-platform determinism
   matrix diffing per-tick checksums, plus a replay fuzz soak.
 
+## Levels
+
+A house is greybox on purpose — primitives, no art — because the base
+level's job is not to look good, it's to be *fair and open*. This is
+UCH: the round-1 no-trap run must be a gentle climb anyone clears, so
+that all the difficulty is the stuff the cats knock into it. Design for
+low base difficulty and lots of trap surface, not for a hard platformer.
+
+Every dimension is sized in movement units, derived once from the jump:
+a full jump peaks at 3.3 tiles, a rising-2 jump carries ~4.3 tiles
+across and a flat jump ~5.1, so required climbs stay at 2 tiles, gaps
+between platforms at 3, and any pit at 4. A gap the jump can't clear is
+not a difficulty choice, it's a bug.
+
+The generated dailies (`SimGen`) build to that grammar: a rightward,
+rising three-platform staircase from the spawn ground to the high
+dinner bowl, each hop inside the envelope so the critical path is
+reachable *by construction* — the last platform is one safe step below
+the bowl, not wherever the ladder happened to stop. A seeded chaos bot
+then has to actually reach the bowl before the house is allowed to
+exist; that empirical proof is the backstop for anything the
+construction misses (a stray ledge in the jump arc). The classic house
+is the fixed teaching level and the fallback, and it stays put — its
+geometry is baked into the golden replay, so changing it would mean a
+SIM_VERSION bump and a re-mint, which a base-level tweak doesn't earn.
+
 ## Income
 
 Cosmetics only: cats, hats, trails, swat taunts, maybe a founder pack.

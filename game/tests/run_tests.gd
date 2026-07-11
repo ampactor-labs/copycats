@@ -190,20 +190,56 @@ func test_gen() -> void:
 	var c := SimGen.generate(124, [])
 	check("gen varies by seed", a.rows != c.rows)
 	var d := SimGen.daily(20260710)
-	check("daily level proven beatable", int(d.attempt) >= 0 and int(d.proof_len) > 0, str(d))
+	check("daily house proven beatable", int(d.attempt) >= 0 and int(d.proof_len) > 0, str(d))
 	var lvl: SimLevel = d.lvl
 	check("spawn stands on ground", lvl.solid_at(SimC.fdiv(lvl.spawn_px), SimC.fdiv(lvl.spawn_py)))
-	check("flag sits on its platform", lvl.solid_at(SimC.fdiv(lvl.bowl_cx), SimC.fdiv(lvl.bowl_bot)))
+	check("bowl sits on its platform", lvl.solid_at(SimC.fdiv(lvl.bowl_cx), SimC.fdiv(lvl.bowl_bot)))
 	var log_b := SimBot.farm_finishing(lvl, 100)
 	var st := SimRace.resim(log_b, lvl)
-	check("bot finishes the generated level", bool(st.finished))
+	check("bot finishes the generated house", bool(st.finished))
 	var race := SimRace.create([], [{ "inputs": log_b, "round": 1, "len": int(st.len) }], lvl)
-	check("generated-level ghost stream matches resim", int(race.ghost_streams[0].len) == int(st.len))
-	var saw := L.fan_on_path(st, lvl)
-	if not saw.is_empty():
-		var race2 := SimRace.create([{ "type": "fan", "cx": saw.cx, "cy": saw.cy, "rot": 0, "round": 2 }],
+	check("generated-house ghost stream matches resim", int(race.ghost_streams[0].len) == int(st.len))
+	var fan := L.fan_on_path(st, lvl)
+	if not fan.is_empty():
+		var race2 := SimRace.create([{ "type": "fan", "cx": fan.cx, "cy": fan.cy, "rot": 0, "round": 2 }],
 			[{ "inputs": log_b, "round": 1, "len": int(st.len) }], lvl)
-		check("saw dunks ghost on generated level", int(race2.fates[0].death) >= 0)
+		check("fan swats ghost on generated house", int(race2.fates[0].death) >= 0)
+
+	# level-design invariants across a sample of seeds: every pit is a fair
+	# flat jump, every house has ample trap surface, and every daily is a
+	# real generated house (not the silent classic fallback).
+	var worst_pit := 0
+	var min_surface := 1 << 30
+	for seed_v in range(100, 120):
+		var h := SimGen.generate(seed_v, [])
+		worst_pit = maxi(worst_pit, _widest_pit(h))
+		min_surface = mini(min_surface, _trap_surface(h))
+	check("no pit exceeds a fair flat jump", worst_pit <= SimGen.SAFE_PIT, "widest=%d" % worst_pit)
+	check("every house has ample trap surface", min_surface >= 100, "min=%d" % min_surface)
+	var fallbacks := 0
+	for day in [20260101, 20260215, 20260710, 20260931, 20261225, 20260606, 20260718, 20260822]:
+		if int(SimGen.daily(day).attempt) < 0:
+			fallbacks += 1
+	check("dailies never fall back to the classic house", fallbacks == 0, "fallbacks=%d" % fallbacks)
+
+func _widest_pit(lvl: SimLevel) -> int:
+	var run := 0
+	var worst := 0
+	for x in range(1, SimC.GW - 1):
+		if lvl.solid_at(x, SimGen.GROUND):
+			run = 0
+		else:
+			run += 1
+			worst = maxi(worst, run)
+	return worst
+
+func _trap_surface(lvl: SimLevel) -> int:
+	var open := 0
+	for y in range(2, 13):
+		for x in range(1, SimC.GW - 1):
+			if not lvl.solid_at(x, y):
+				open += 1
+	return open
 
 func test_versus() -> void:
 	# three cats: one farmed finisher, two chaotic runners
