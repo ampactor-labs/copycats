@@ -1,8 +1,5 @@
 # copycats
 
-[![ci](https://github.com/ampactor-labs/copycats/actions/workflows/ci.yml/badge.svg)](https://github.com/ampactor-labs/copycats/actions/workflows/ci.yml)
-[![determinism](https://github.com/ampactor-labs/copycats/actions/workflows/determinism.yml/badge.svg)](https://github.com/ampactor-labs/copycats/actions/workflows/determinism.yml)
-
 You're a cat. Every run that reaches the dinner bowl comes back as a
 copycat — a spectral replay of your own past life, racing you through
 the house. Each round you knock one thing over (a shelf, a cactus, a
@@ -10,15 +7,27 @@ box fan, a cushion, a ball launcher), then run. Swat your copycats
 with what you placed while still making dinner yourself; if everyone
 lands on their feet, nobody scores. First to nine.
 
-Play it: **https://ampactor.dev/copycats/** — phone, landscape, no
-install. SOLO races your own past lives; COUCH is 2-8 cats passing one
-screen around — everyone places, everyone runs the same locked house,
-then the whole round replays at once with swats credited by name. A
-couch match autosaves after every round and resumes from the title.
-Matches are device-local, so two rooms of the same house can run two
-matches at once by construction. `DESIGN.md` holds the full form this
-builds toward: async multiplayer for a group chat, built on
-deterministic replays instead of netcode.
+[![ci](https://github.com/ampactor-labs/copycats/actions/workflows/ci.yml/badge.svg)](https://github.com/ampactor-labs/copycats/actions/workflows/ci.yml)
+[![determinism](https://github.com/ampactor-labs/copycats/actions/workflows/determinism.yml/badge.svg)](https://github.com/ampactor-labs/copycats/actions/workflows/determinism.yml)
+
+**Status: shipping.** Live at https://ampactor.dev/copycats/ — phone, landscape, no install; the async group-chat form DESIGN.md builds toward is designed, not built.
+
+SOLO races your own past lives; COUCH is 2-8 cats passing one screen
+around — everyone places, everyone runs the same locked house, then
+the whole round replays at once with swats credited by name. A couch
+match autosaves after every round and resumes from the title. Matches
+are device-local, so two rooms of the same house can run two matches
+at once by construction.
+
+## Run
+
+```sh
+godot --path game        # desktop: WASD/arrows + space, S or swipe to drop
+bash game/test.sh        # headless: import + sim suite + flow suite + fuzz
+```
+
+On a phone the left thumb slides a floating stick, the right thumb taps
+to jump (hold for height), swipe down drops through shelves.
 
 ## Layout
 
@@ -31,17 +40,21 @@ deterministic replays instead of netcode.
 - `index.html` — the original single-file browser spike (built under
   the working name chickho), kept as the feel reference.
 
-## Run
+## Weak spots
 
-```sh
-godot --path game        # desktop: WASD/arrows + space, S or swipe to drop
-bash game/test.sh        # headless: import + sim suite + flow suite + fuzz
-```
+Nothing crosses the network: matches never leave the phone, there is
+no relay, and racing a friend means handing them the screen. The full
+form — async multiplayer for a group chat, built on deterministic
+replays instead of netcode — lives in DESIGN.md as design, not code.
 
-On a phone the left thumb slides a floating stick, the right thumb taps
-to jump (hold for height), swipe down drops through shelves.
+Replays are strictly versioned. Any real sim change bumps `SIM_VERSION`
+and re-mints the golden checksum; recorded copycats from the old
+version are dead, with no migrations, deliberately.
 
-## Tests
+`index.html` at the repo root is the browser spike, not the game; the
+game is the Godot build in `game/`.
+
+## Testing
 
 `tests/run_tests.gd` covers jump feel, coyote and buffer windows,
 placement rules, scoring, the replay codec, seeded level generation,
